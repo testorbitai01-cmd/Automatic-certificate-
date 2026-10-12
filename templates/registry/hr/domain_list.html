@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Domains{% endblock %}
+{% block content %}
+<h1>Internship domains</h1>
+<p class="muted">Domains requested by students stay pending until approved here. Domains are never deleted; deactivating one hides it from the form but keeps existing records.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Status</th><th>Internships</th><th>Requested from</th>{% if perms.registry.manage_domain %}<th>Actions</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for d in domains %}
+    <tr>
+      <td>{{ d.name }}</td>
+      <td><span class="badge {{ d.status }}">{{ d.get_status_display }}</span></td>
+      <td>{{ d.n_internships }}</td>
+      <td>{% if d.requested_by_submission_id %}<a href="{% url 'registry:campaign_detail' d.requested_by_submission.campaign_id %}">Student submission</a>{% else %}—{% endif %}</td>
+      {% if perms.registry.manage_domain %}
+      <td>
+        <form method="post" action="{% url 'registry:domain_set_status' d.pk %}" class="inline">{% csrf_token %}
+          {% if d.status == "pending" %}
+            <button class="small-button" name="status" value="active">Approve</button>
+            <button class="small-button danger" name="status" value="inactive">Reject</button>
+          {% elif d.status == "active" %}
+            <button class="small-button secondary" name="status" value="inactive">Deactivate</button>
+          {% else %}
+            <button class="small-button secondary" name="status" value="active">Activate</button>
+          {% endif %}
+        </form>
+        <a class="button secondary small-button" href="{% url 'registry:domain_rename' d.pk %}">Rename</a>
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

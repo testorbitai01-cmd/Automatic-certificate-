@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Rename domain{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>Rename “{{ domain.name }}”</h1>
+<form method="post" class="card" novalidate>
+  {% csrf_token %}
+  <label for="{{ form.name.id_for_label }}">New name</label>
+  {{ form.name }}
+  {% for error in form.name.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+  <p class="help">Existing records stay linked to this domain. Certificates already issued keep the name recorded at issue time.</p>
+  <button type="submit">Rename</button>
+  <a class="button secondary" href="{% url 'registry:domain_list' %}">Cancel</a>
+</form>
+{% endblock %}

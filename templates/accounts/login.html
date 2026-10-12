@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:40px auto">
+  <h1 style="margin-top:0;font-size:20px">Staff sign in</h1>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<p class="messages error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    <label for="id_username">Email</label>
+    <input id="id_username" name="username" type="email" autocomplete="username" value="{{ form.username.value|default:'' }}" required>
+    <label for="id_password">Password</label>
+    <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

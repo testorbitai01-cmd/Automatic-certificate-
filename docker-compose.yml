@@ -1,0 +1,34 @@
+# Production-like stack. Secrets come from .env (see .env.example), never from this file.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: gradtwin_certificates
+      POSTGRES_USER: gradtwin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gradtwin -d gradtwin_certificates"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://gradtwin:${POSTGRES_PASSWORD}@db:5432/gradtwin_certificates
+      PRIVATE_STORAGE_ROOT: /srv/gradtwin/private
+    volumes:
+      - private:/srv/gradtwin/private
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  # Phase 5 adds the document converter and Phase 7 the background worker.
+
+volumes:
+  pgdata:
+  private:

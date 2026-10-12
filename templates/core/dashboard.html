@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 style="font-size:22px">Dashboard</h1>
+<div class="stats">
+  <div class="card stat"><b>{{ pending_submissions }}</b><span class="muted">Pending submissions</span></div>
+  <div class="card stat"><b>{{ issued_certificates }}</b><span class="muted">Issued certificates</span></div>
+</div>
+{% endblock %}

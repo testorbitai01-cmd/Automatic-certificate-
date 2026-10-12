@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Registration unavailable{% endblock %}
+{% block brand %}Internship Registration{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  {% if reason == "invalid" %}
+    <h1>This registration link is not valid</h1>
+    <p>Please check that you scanned the correct QR code or copied the full link, or contact HR for a new link.</p>
+  {% elif reason == "scheduled" %}
+    <h1>Registration has not opened yet</h1>
+    <p>Registration for {{ campaign.name }} opens on {{ campaign.opens_at|date:"j F Y, g:i A" }}. Please try again then.</p>
+  {% elif reason == "expired" %}
+    <h1>Registration has closed</h1>
+    <p>Registration for {{ campaign.name }} closed on {{ campaign.closes_at|date:"j F Y, g:i A" }}. Please contact HR if you still need to register.</p>
+  {% elif reason == "deactivated" %}
+    <h1>This registration link is no longer active</h1>
+    <p>Please contact HR for help.</p>
+  {% elif reason == "rate_limited" %}
+    <h1>Too many attempts</h1>
+    <p>Please wait a while before trying again, or contact HR.</p>
+  {% endif %}
+</div>
+{% endblock %}

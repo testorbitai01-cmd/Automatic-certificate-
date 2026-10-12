@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load registry_extras %}
+{% block title %}Internship registration{% endblock %}
+{% block brand %}Internship Registration{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>{{ campaign.name }}</h1>
+<p class="muted">Please enter your details exactly as they should appear on your documents. Fields marked <span class="required-mark">*</span> are required.</p>
+
+<form method="post" class="card" id="registration-form" novalidate>
+  {% csrf_token %}
+  {{ form.form_token }}
+  {% if form.non_field_errors %}<div class="alert-error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% if form.errors and not form.non_field_errors %}<div class="alert-error" role="alert">Please correct the highlighted fields below.</div>{% endif %}
+
+  <div class="row-name">
+    {% include "registry/public/_field.html" with field=form.title %}
+    {% include "registry/public/_field.html" with field=form.full_name suggestion=form.suggestions|get:"full_name" %}
+  </div>
+
+  <div class="field">
+    <span class="label">Gender <span class="required-mark" aria-hidden="true">*</span></span>
+    <div class="radio-row">{% for radio in form.gender %}<label>{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}</div>
+    {% for error in form.gender.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
+  </div>
+  {% include "registry/public/_field.html" with field=form.gender_detail hidden=True %}
+
+  <div class="row">
+    {% include "registry/public/_field.html" with field=form.mobile %}
+    {% include "registry/public/_field.html" with field=form.reg_no %}
+  </div>
+  <div class="row">
+    {% include "registry/public/_field.html" with field=form.email %}
+    {% include "registry/public/_field.html" with field=form.alternate_email %}
+  </div>
+
+  {% include "registry/public/_field.html" with field=form.degree suggestion=form.suggestions|get:"degree" %}
+  <div class="row">
+    {% include "registry/public/_field.html" with field=form.college_name suggestion=form.suggestions|get:"college_name" %}
+    {% include "registry/public/_field.html" with field=form.college_location suggestion=form.suggestions|get:"college_location" %}
+  </div>
+
+  {% include "registry/public/_field.html" with field=form.domain %}
+  {% include "registry/public/_field.html" with field=form.requested_domain hidden=True suggestion=form.suggestions|get:"requested_domain" %}
+  <p class="help" id="domain-request-note" hidden>New domains are reviewed by HR before they are added.</p>
+
+  <div class="row">
+    {% include "registry/public/_field.html" with field=form.start_date %}
+    {% include "registry/public/_field.html" with field=form.end_date %}
+  </div>
+  <p class="help" id="period-preview" aria-live="polite"></p>
+
+  {% include "registry/public/_field.html" with field=form.project_title suggestion=form.suggestions|get:"project_title" %}
+  {% include "registry/public/_field.html" with field=form.feedback %}
+
+  <button type="submit" id="submit-button">Submit</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var form = document.getElementById("registration-form");
+  var byId = function (id) { return document.getElementById(id); };
+
+  // Mark invalid fields for assistive technology.
+  document.querySelectorAll(".field").forEach(function (f) {
+    if (f.querySelector(".field-error")) {
+      var input = f.querySelector("input, select, textarea");
+      if (input) input.setAttribute("aria-invalid", "true");
+    }
+  });
+
+  // "Use this" applies a suggested correction only when the student chooses to.
+  document.querySelectorAll("[data-apply-suggestion]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var input = byId(btn.getAttribute("data-apply-suggestion"));
+      input.value = btn.getAttribute("data-value");
+      input.removeAttribute("aria-invalid");
+      btn.parentElement.hidden = true;
+      input.focus();
+    });
+  });
+
+  // Gender "Others" reveals the optional detail field.
+  function syncGender() {
+    var checked = form.querySelector("input[name=gender]:checked");
+    var show = checked && checked.value === "others";
+    byId("field-gender_detail").hidden = !show;
+    if (!show) byId("id_gender_detail").value = "";
+  }
+  form.querySelectorAll("input[name=gender]").forEach(function (r) { r.addEventListener("change", syncGender); });
+  syncGender();
+
+  // Domain request.
+  function syncDomain() {
+    var show = byId("id_domain").value === "__request__";
+    byId("field-requested_domain").hidden = !show;
+    byId("domain-request-note").hidden = !show;
+  }
+  byId("id_domain").addEventListener("change", syncDomain);
+  syncDomain();
+
+  // Readable period preview and date-order check.
+  var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  function parse(v) { var p = v.split("-"); return p.length === 3 ? {y: +p[0], m: +p[1] - 1} : null; }
+  function syncPeriod() {
+    var s = byId("id_start_date").value, e = byId("id_end_date").value, out = byId("period-preview");
+    byId("id_end_date").setCustomValidity("");
+    if (!s || !e) { out.textContent = ""; return; }
+    if (e < s) {
+      out.textContent = "The end date cannot be earlier than the start date.";
+      byId("id_end_date").setCustomValidity(out.textContent);
+      return;
+    }
+    var a = parse(s), b = parse(e);
+    out.textContent = "Internship period: " + months[a.m] + " " + a.y + " to " + months[b.m] + " " + b.y;
+  }
+  byId("id_start_date").addEventListener("change", syncPeriod);
+  byId("id_end_date").addEventListener("change", syncPeriod);
+  syncPeriod();
+
+  // Mobile: digits only, exactly 10.
+  byId("id_mobile").addEventListener("input", function () {
+    var v = this.value;
+    this.setCustomValidity(/^[6-9][0-9]{9}$/.test(v) || v === "" ? "" : "Mobile number must contain exactly 10 digits, starting with 6–9.");
+  });
+
+  // Prevent double submission; the server also de-duplicates by form token.
+  form.addEventListener("submit", function (ev) {
+    if (!form.checkValidity()) { ev.preventDefault(); form.reportValidity(); return; }
+    var btn = byId("submit-button");
+    if (btn.disabled) { ev.preventDefault(); return; }
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Browser tests only (tests/browser, run with: pytest -m browser). Uses the installed Microsoft Edge.
+playwright>=1.50
+pytest-playwright>=0.7

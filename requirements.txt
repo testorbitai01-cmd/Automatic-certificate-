@@ -1,0 +1,9 @@
+Django>=5.2,<5.3
+psycopg[binary]>=3.2
+dj-database-url>=2.2
+argon2-cffi>=23.1
+segno>=1.6
+
+# test
+pytest>=8
+pytest-django>=4.9

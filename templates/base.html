@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Certificate Management{% endblock %}</title>
+  <style>
+    :root { --fg:#1f2328; --muted:#59636e; --bg:#f6f8fa; --card:#fff; --line:#d1d9e0; --accent:#0969da;
+            --err:#cf222e; --err-bg:#ffebe9; --ok:#1a7f37; --ok-bg:#dafbe1; --warn:#9a6700; --warn-bg:#fff8c5; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--fg); background:var(--bg); }
+    header { background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; flex-wrap:wrap; gap:8px 16px; justify-content:space-between; align-items:center; }
+    header nav a { margin-right:14px; color:var(--fg); text-decoration:none; }
+    header nav a:hover { color:var(--accent); }
+    main { max-width:1100px; margin:24px auto; padding:0 16px; }
+    main.narrow { max-width:720px; }
+    h1 { font-size:22px; margin:0 0 16px; }
+    h2 { font-size:17px; margin:24px 0 8px; }
+    a { color:var(--accent); }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:20px; }
+    .messages { list-style:none; padding:0; margin:0 0 16px; }
+    .messages li { padding:10px 12px; border-radius:6px; margin-bottom:8px; }
+    .messages .error, .alert-error { background:var(--err-bg); color:var(--err); }
+    .messages .success { background:var(--ok-bg); color:var(--ok); }
+    .alert-error { padding:10px 12px; border-radius:6px; margin-bottom:16px; }
+    label, .label { display:block; font-weight:600; margin:16px 0 4px; }
+    input[type=text], input[type=email], input[type=password], input[type=date], input[type=datetime-local], select, textarea {
+      width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+    input[aria-invalid=true], select[aria-invalid=true], textarea[aria-invalid=true] { border-color:var(--err); }
+    .help { color:var(--muted); font-size:13px; margin-top:4px; }
+    .field-error { color:var(--err); font-size:14px; margin-top:4px; }
+    .suggestion { background:var(--warn-bg); color:var(--warn); padding:6px 10px; border-radius:6px; margin-top:6px; font-size:14px; }
+    .radio-row { display:flex; flex-wrap:wrap; gap:16px; }
+    .radio-row label { font-weight:400; margin:0; display:flex; gap:6px; align-items:center; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+    .row-name { display:grid; grid-template-columns:110px 1fr; gap:0 12px; }
+    @media (max-width:560px) { .row { grid-template-columns:1fr; } }
+    button, .button { display:inline-block; margin-top:16px; padding:9px 18px; border:0; border-radius:6px; background:var(--accent);
+      color:#fff; font:inherit; cursor:pointer; text-decoration:none; }
+    button[disabled] { opacity:.6; cursor:progress; }
+    .button.secondary, button.secondary { background:#fff; color:var(--fg); border:1px solid var(--line); }
+    button.danger { background:var(--err); }
+    .link-button { background:none; color:var(--accent); padding:0; margin:0; }
+    .small-button { margin:0; padding:4px 10px; font-size:13px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+    .stat b { display:block; font-size:28px; }
+    .muted { color:var(--muted); }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; background:var(--card); }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+    th { background:var(--bg); font-weight:600; }
+    .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; background:var(--bg); border:1px solid var(--line); }
+    .badge.open, .badge.active { background:var(--ok-bg); color:var(--ok); border-color:transparent; }
+    .badge.expired, .badge.deactivated, .badge.inactive { background:var(--err-bg); color:var(--err); border-color:transparent; }
+    .badge.scheduled, .badge.pending, .badge.flag { background:var(--warn-bg); color:var(--warn); border-color:transparent; }
+    .inline { display:inline; }
+    code.url { word-break:break-all; background:var(--bg); padding:4px 6px; border-radius:4px; }
+    .required-mark { color:var(--err); }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>{% block brand %}Certificate Management{% endblock %}</strong>
+    {% if user.is_authenticated and user.is_staff %}
+      <nav>
+        <a href="{% url 'core:dashboard' %}">Dashboard</a>
+        {% if perms.registry.view_campaign %}<a href="{% url 'registry:campaign_list' %}">Campaigns</a>{% endif %}
+        {% if perms.registry.view_domain %}<a href="{% url 'registry:domain_list' %}">Domains</a>{% endif %}
+      </nav>
+      <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+        <span class="muted">{{ user.email }}</span> · <button class="link-button" type="submit">Sign out</button>
+      </form>
+    {% endif %}
+  </header>
+  <main class="{% block main_class %}{% endblock %}">
+    {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

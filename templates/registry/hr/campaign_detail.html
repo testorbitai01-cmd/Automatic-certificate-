@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'registry:campaign_list' %}">← All campaigns</a></p>
+<h1>{{ campaign.name }} <span class="badge {{ state }}">{{ state|capfirst }}</span></h1>
+
+<div class="row" style="align-items:start">
+  <div class="card">
+    <div class="label" style="margin-top:0">Registration link</div>
+    <code class="url" id="registration-url">{{ registration_url }}</code>
+    <div><button type="button" class="secondary small-button" style="margin-top:8px" id="copy-link">Copy link</button></div>
+    <dl>
+      <dt class="label">Domain</dt><dd>{{ campaign.domain|default:"Student chooses" }}</dd>
+      <dt class="label">Opens</dt><dd>{{ campaign.opens_at|date:"j F Y, g:i A" }}</dd>
+      <dt class="label">Closes</dt><dd>{{ campaign.closes_at|date:"j F Y, g:i A" }}</dd>
+      <dt class="label">Created by</dt><dd>{{ campaign.created_by }}</dd>
+    </dl>
+    {% if perms.registry.manage_campaign %}
+      <a class="button secondary" href="{% url 'registry:campaign_edit' campaign.pk %}">Edit dates / name</a>
+      <form method="post" action="{% url 'registry:campaign_set_status' campaign.pk %}" class="inline">
+        {% csrf_token %}
+        {% if campaign.status == "active" %}
+          <input type="hidden" name="status" value="inactive">
+          <button type="submit" class="danger" onclick="return confirm('Deactivate this registration link? Students will no longer be able to submit.')">Deactivate link</button>
+        {% else %}
+          <input type="hidden" name="status" value="active">
+          <button type="submit">Reactivate link</button>
+        {% endif %}
+      </form>
+    {% endif %}
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="label" style="margin-top:0">QR code</div>
+    <div style="display:inline-block;max-width:260px">{{ qr_svg|safe }}</div>
+    <p class="help">Contains only the registration link above.</p>
+    <a class="button secondary small-button" href="{% url 'registry:campaign_qr' campaign.pk 'png' %}">Download PNG</a>
+    <a class="button secondary small-button" href="{% url 'registry:campaign_qr' campaign.pk 'svg' %}">Download SVG</a>
+  </div>
+</div>
+
+{% if submissions is not None %}
+<h2>Submissions ({{ submissions|length }})</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Submitted</th><th>Name</th><th>Reg. No</th><th>Domain</th><th>Period</th><th>Status</th><th>Review</th></tr></thead>
+  <tbody>
+  {% for s in submissions %}
+    <tr>
+      <td>{{ s.submitted_at|date:"j M Y, H:i" }}</td>
+      <td>{{ s.student.title }} {{ s.student.full_name }}</td>
+      <td>{{ s.student.reg_no }}</td>
+      {% with i=s.internships.all.0 %}
+      <td>{{ i.domain }}{% if i.domain.status == "pending" %} <span class="badge pending">Pending approval</span>{% endif %}</td>
+      <td>{{ i.start_date|date:"F Y" }} to {{ i.end_date|date:"F Y" }}</td>
+      {% endwith %}
+      <td><span class="badge">{{ s.get_status_display }}</span></td>
+      <td>
+        {% if s.open_flags %}<span class="badge flag">Possible duplicate ×{{ s.open_flags }}</span>{% endif %}
+        {% for note in s.review_notes %}<div class="help">{{ note }}</div>{% endfor %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7" class="muted">No submissions yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="help">Submission review, approval and corrections are added in Phase 4.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("copy-link").addEventListener("click", function () {
+  var btn = this, url = document.getElementById("registration-url").textContent;
+  navigator.clipboard.writeText(url).then(function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy link"; }, 1500); });
+});
+</script>
+{% endblock %}

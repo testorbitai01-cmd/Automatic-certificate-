@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Registration campaigns{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0">Registration campaigns</h1>
+  {% if perms.registry.manage_campaign %}<a class="button" style="margin:0" href="{% url 'registry:campaign_create' %}">New campaign</a>{% endif %}
+</div>
+<div class="table-wrap" style="margin-top:16px">
+<table>
+  <thead><tr><th>Name</th><th>Domain</th><th>Opens</th><th>Closes</th><th>Status</th><th>Submissions</th></tr></thead>
+  <tbody>
+  {% for c in campaigns %}
+    {% with state=c.availability %}
+    <tr>
+      <td><a href="{% url 'registry:campaign_detail' c.pk %}">{{ c.name }}</a></td>
+      <td>{{ c.domain|default:"—" }}</td>
+      <td>{{ c.opens_at|date:"j M Y, H:i" }}</td>
+      <td>{{ c.closes_at|date:"j M Y, H:i" }}</td>
+      <td><span class="badge {{ state }}">{{ state|capfirst }}</span></td>
+      <td>{{ c.n_submissions }}</td>
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="muted">No campaigns yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

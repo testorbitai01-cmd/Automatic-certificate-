@@ -1,0 +1,12 @@
+{# Renders one form field with label, help text, error and an optional suggested correction. #}
+<div class="field" id="field-{{ field.name }}"{% if hidden %} hidden{% endif %}>
+  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark" aria-hidden="true">*</span>{% endif %}</label>
+  {{ field }}
+  {% if field.help_text %}<div class="help" id="{{ field.id_for_label }}_help">{{ field.help_text }}</div>{% endif %}
+  {% for error in field.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
+  {% if suggestion %}
+    <div class="suggestion">Did you mean <strong>{{ suggestion }}</strong>?
+      <button type="button" class="link-button" data-apply-suggestion="{{ field.id_for_label }}" data-value="{{ suggestion }}">Use this</button>
+    </div>
+  {% endif %}
+</div>

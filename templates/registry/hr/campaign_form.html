@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{% if campaign %}Edit campaign{% else %}New campaign{% endif %}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>{% if campaign %}Edit “{{ campaign.name }}”{% else %}New registration campaign{% endif %}</h1>
+<form method="post" class="card" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert-error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% for field in form %}
+    <div class="field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+    </div>
+  {% endfor %}
+  <p class="help">Times are in India Standard Time. {% if campaign %}Changing dates does not change the registration link or QR code.{% endif %}</p>
+  <button type="submit">{% if campaign %}Save changes{% else %}Create campaign{% endif %}</button>
+  <a class="button secondary" href="{% if campaign %}{% url 'registry:campaign_detail' campaign.pk %}{% else %}{% url 'registry:campaign_list' %}{% endif %}">Cancel</a>
+</form>
+{% endblock %}

@@ -1,0 +1,240 @@
+import re
+import secrets
+
+from django.conf import settings
+from django.db import models
+from django.db.models import F, Q
+from django.utils import timezone
+
+_WS = re.compile(r"\s+")
+
+
+def collapse_whitespace(value):
+    return _WS.sub(" ", (value or "").strip())
+
+
+def comparison_key(value):
+    """Case- and whitespace-insensitive key for duplicate comparison only."""
+    return collapse_whitespace(value).casefold()
+
+
+def reg_no_key(value):
+    """Registration numbers compared without case, spaces, or separators.
+
+    Used only to *flag* possible duplicates for review, never as a unique key.
+    """
+    return re.sub(r"[\s\-/._]", "", (value or "")).casefold()
+
+
+def new_public_token():
+    return secrets.token_urlsafe(24)
+
+
+class Domain(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending approval"
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Inactive"
+
+    name = models.CharField(max_length=100)
+    normalized_key = models.CharField(max_length=100, unique=True, editable=False)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    requested_by_submission = models.ForeignKey(
+        "Submission", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        permissions = [("manage_domain", "Can approve, rename, activate and deactivate domains")]
+
+    def save(self, *args, **kwargs):
+        self.name = collapse_whitespace(self.name)
+        self.normalized_key = comparison_key(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class Campaign(models.Model):
+    """A registration batch. Its QR code encodes only the public registration URL."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Deactivated"
+
+    name = models.CharField(max_length=150)
+    domain = models.ForeignKey(Domain, null=True, blank=True, on_delete=models.PROTECT, related_name="campaigns")
+    opens_at = models.DateTimeField()
+    closes_at = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
+    public_token = models.CharField(max_length=64, unique=True, default=new_public_token, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-opens_at"]
+        constraints = [
+            models.CheckConstraint(condition=Q(closes_at__gt=F("opens_at")), name="campaign_closes_after_opens"),
+        ]
+        permissions = [("manage_campaign", "Can create, deactivate and reopen registration campaigns")]
+
+    def is_accepting(self, at=None):
+        at = at or timezone.now()
+        return self.status == self.Status.ACTIVE and self.opens_at <= at < self.closes_at
+
+    def availability(self, at=None):
+        """One of: open, scheduled, expired, deactivated."""
+        at = at or timezone.now()
+        if self.status != self.Status.ACTIVE:
+            return "deactivated"
+        if at < self.opens_at:
+            return "scheduled"
+        if at >= self.closes_at:
+            return "expired"
+        return "open"
+
+    def __str__(self):
+        return self.name
+
+
+class Student(models.Model):
+    class Gender(models.TextChoices):
+        MALE = "male", "Male"
+        FEMALE = "female", "Female"
+        OTHERS = "others", "Others"
+
+    title = models.CharField(max_length=10)  # validated against the configured title list
+    full_name = models.CharField(max_length=150)
+    # Name used in salutations/LOR body (e.g. given names without the trailing initial); set or confirmed by HR, never auto-derived.
+    short_name = models.CharField(max_length=150, blank=True)
+    gender = models.CharField(max_length=10, choices=Gender.choices)
+    gender_detail = models.CharField(max_length=100, blank=True)
+    mobile = models.CharField(max_length=10)
+    reg_no = models.CharField(max_length=40)
+    reg_no_key = models.CharField(max_length=40, db_index=True, editable=False)
+    degree = models.CharField(max_length=150)
+    college_name = models.CharField(max_length=200)
+    college_location = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["full_name"]
+
+    def save(self, *args, **kwargs):
+        self.reg_no = collapse_whitespace(self.reg_no)
+        self.reg_no_key = reg_no_key(self.reg_no)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.title} {self.full_name}"
+
+
+class StudentEmail(models.Model):
+    class Kind(models.TextChoices):
+        PRIMARY = "primary", "Registered"
+        ALTERNATE = "alternate", "Alternative"
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="emails")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    address = models.EmailField()
+    # Lowercased only; no Gmail dot/plus folding (those can be different mailboxes in policy terms).
+    address_key = models.CharField(max_length=254, db_index=True, editable=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["student", "kind"], name="one_email_per_kind")]
+
+    def save(self, *args, **kwargs):
+        self.address = self.address.strip()
+        self.address_key = self.address.lower()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_verified(self):
+        return self.verified_at is not None
+
+    def __str__(self):
+        return self.address
+
+
+class Submission(models.Model):
+    class Status(models.TextChoices):
+        SUBMITTED = "submitted", "Submitted"
+        UNDER_REVIEW = "under_review", "Under review"
+        CORRECTION_REQUESTED = "correction_requested", "Correction requested"
+        VERIFIED = "verified", "Verified"
+        REJECTED = "rejected", "Rejected"
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="submissions")
+    student = models.ForeignKey(Student, on_delete=models.PROTECT, related_name="submissions")
+    # Exactly what the student typed, before any normalization, for audit.
+    raw_payload = models.JSONField()
+    # Copied from the student at submission time so the database can block a repeated
+    # registration number within one campaign, even under concurrent requests.
+    reg_no_key = models.CharField(max_length=40, editable=False)
+    # Validator notes for HR (e.g. unrecognized degree format). Never shown publicly.
+    review_notes = models.JSONField(default=list, blank=True)
+    feedback = models.TextField(blank=True)
+    status = models.CharField(max_length=25, choices=Status.choices, default=Status.SUBMITTED)
+    status_reason = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Form token: a resubmitted/double-clicked form maps to the same submission.
+    idempotency_key = models.CharField(max_length=64, unique=True)
+    submitted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["campaign", "student"], name="one_submission_per_student_per_campaign"),
+            models.UniqueConstraint(fields=["campaign", "reg_no_key"], name="one_submission_per_reg_no_per_campaign"),
+        ]
+        permissions = [("review_submission", "Can approve, reject or request corrections on submissions")]
+
+    def save(self, *args, **kwargs):
+        if not self.reg_no_key:
+            self.reg_no_key = self.student.reg_no_key
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student} / {self.campaign}"
+
+
+class DuplicateCandidate(models.Model):
+    """A possible duplicate flagged for HR review. Nothing is merged or deleted automatically."""
+
+    class Reason(models.TextChoices):
+        REG_NO = "reg_no", "Same registration number"
+        EMAIL = "email", "Same email address"
+        MOBILE = "mobile", "Same mobile number"
+
+    class Resolution(models.TextChoices):
+        PENDING = "pending", "Pending review"
+        NOT_DUPLICATE = "not_duplicate", "Not a duplicate"
+        DUPLICATE = "duplicate", "Confirmed duplicate"
+
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="duplicate_flags")
+    matches = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="+")
+    reason = models.CharField(max_length=10, choices=Reason.choices)
+    resolution = models.CharField(max_length=15, choices=Resolution.choices, default=Resolution.PENDING)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["submission", "matches", "reason"], name="unique_duplicate_flag"),
+            models.CheckConstraint(condition=~Q(submission=F("matches")), name="duplicate_not_self"),
+        ]
+        permissions = [("resolve_duplicate", "Can resolve possible duplicate submissions")]
