@@ -116,11 +116,13 @@ STATIC_ROOT = BASE_DIR / "var" / "static"
 # downloads go through permission-checked views.
 PRIVATE_STORAGE_ROOT = Path(os.environ.get("PRIVATE_STORAGE_ROOT", BASE_DIR / "var" / "private"))
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage",
+    "default": {"BACKEND": "apps.core.storage.PrivateFileSystemStorage",
                 "OPTIONS": {"location": PRIVATE_STORAGE_ROOT, "base_url": None}},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 FILE_UPLOAD_PERMISSIONS = 0o640
+# Largest accepted certificate template (.docx) upload.
+TEMPLATE_UPLOAD_MAX_BYTES = int(os.environ.get("TEMPLATE_UPLOAD_MAX_BYTES", str(5 * 1024 * 1024)))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 

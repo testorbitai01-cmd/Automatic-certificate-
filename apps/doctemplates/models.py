@@ -2,7 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 from apps.core.choices import CertificateType
 
@@ -31,6 +31,7 @@ class TemplateVersion(models.Model):
         PENDING_APPROVAL = "pending_approval", "Pending approval"
         ACTIVE = "active", "Active"
         RETIRED = "retired", "Retired"
+        REJECTED = "rejected", "Rejected"
 
     class SourceFormat(models.TextChoices):
         DOCX = "docx", "Word (.docx)"
@@ -45,7 +46,10 @@ class TemplateVersion(models.Model):
     source_file = models.FileField(upload_to=template_upload_path)
     source_filename = models.CharField(max_length=255)
     source_sha256 = models.CharField(max_length=64)
+    source_size = models.PositiveIntegerField(default=0)
     source_format = models.CharField(max_length=10, choices=SourceFormat.choices)
+    # Result of apps/doctemplates/docx.py inspection: placeholders found, image count, paragraph count.
+    inspection = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     notes = models.TextField(blank=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
@@ -55,6 +59,14 @@ class TemplateVersion(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
     approval_note = models.TextField(blank=True)
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                     related_name="+")
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    # Who rejected or retired the version, when, and why.
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                  related_name="+")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    close_reason = models.TextField(blank=True)
 
     class Meta:
         ordering = ["template", "-version"]
@@ -67,6 +79,18 @@ class TemplateVersion(models.Model):
                 condition=~Q(status="active") | Q(approved_by__isnull=False, approved_at__isnull=False),
                 name="active_version_requires_approval",
             ),
+            models.CheckConstraint(
+                condition=~Q(status="pending_approval") | Q(submitted_by__isnull=False, submitted_at__isnull=False),
+                name="pending_version_has_submitter",
+            ),
+            models.CheckConstraint(
+                condition=~Q(status__in=["rejected", "retired"])
+                | (Q(closed_by__isnull=False, closed_at__isnull=False) & ~Q(close_reason="")),
+                name="closed_version_has_actor_and_reason",
+            ),
+            models.CheckConstraint(condition=~Q(source_sha256=""), name="version_has_file_hash"),
+            # Separation of duties: nobody approves a version they uploaded (NULL approver passes).
+            models.CheckConstraint(condition=~Q(approved_by=F("uploaded_by")), name="approver_is_not_uploader"),
         ]
         permissions = [
             ("upload_template", "Can upload certificate template versions"),

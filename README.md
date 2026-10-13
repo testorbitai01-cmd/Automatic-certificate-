@@ -15,8 +15,9 @@ for production certificates. Until they are provided, the system works with file
 | 2. Foundation (schema, auth, roles, audit, config, tests) | Done |
 | 3. QR registration campaigns and student form | Done |
 | 3.1 PostgreSQL + browser verification, shared rate limits | Done |
-| 4. HR review, corrections, duplicates, completion and per-certificate approval | Done (awaiting review) |
-| 5–10 | Not started |
+| 4. HR review, corrections, duplicates, completion and per-certificate approval | Done |
+| 5. Certificate template management and preview | Done (awaiting review) |
+| 6–10 | Not started |
 
 ## Local development (Windows, PowerShell)
 
@@ -115,6 +116,60 @@ To try it: register a test student through a campaign link (see above), then sig
 .venv\Scripts\python -m pytest -m browser tests\browser\test_review_browser.py
 ```
 
+### Phase 5 — Certificate templates
+
+**Templates** (http://127.0.0.1:8000/hr/templates/) holds the four types: Offer Letter, Experience / Internship,
+Project Completion and LOR. The system never writes certificate wording, logos, signatures or seals: all of
+that comes from the uploaded Gradtwin Word file.
+
+1. **Upload** (HR Admin or Super Admin): the original Gradtwin `.docx` with student-specific text replaced by
+   approved placeholders, e.g. `{{ full_name }}`, `{{ start_month_year }}`. Tick *authentic Gradtwin template*
+   only for official files; anything else is a **TEST** template that can never be used for production.
+   Uploads are checked and refused with reasons if they are not a plain `.docx` (max 5 MB), are macro-enabled,
+   encrypted, contain embedded objects, load external content (ordinary hyperlinks are fine), contain
+   DOCTYPE/ENTITY declarations or look like a zip bomb; or if they use template logic (`{% %}`), filters,
+   unknown placeholders, placeholders not allowed for that type, or no placeholders at all (a filled-in
+   certificate rather than a template). Placeholders may appear only in the visible text of the body, headers
+   and footers: template syntax in comments, footnotes/endnotes, field codes, tracked changes, document
+   settings or image descriptions is refused (accept all tracked changes and delete comments before
+   uploading). Damaged files are refused cleanly. The approved list is shown on the upload page
+   (`apps/doctemplates/placeholders.py`). Files are stored privately under random names; there is no URL,
+   downloads go through a permission-checked, audited view.
+2. **Preview**: each version page shows the template text in document order with placeholders replaced by
+   clearly labelled **synthetic** values, escaped as HTML. It is text-only (no fonts, layout or images) and
+   creates, saves and sends nothing.
+3. **Submit for review** (HR) → **Approve and activate** (Super Admin only, after confirming the version was
+   compared with the original). **Separation of duties:** nobody can approve or activate a version they
+   uploaded — enforced in the service layer (HTTP 403) and by a database constraint; a Super Admin who
+   uploads a template needs a second Super Admin to activate it. (Rejecting or deactivating one's own
+   upload is allowed.) Activation retires the previously active version in the same transaction, so
+   only one version per type is ever active. Super Admins can also **reject** drafts/pending versions and
+   **deactivate** the active one (reason required), or reactivate a retired version. A TEST template can never
+   replace an active authentic template (deactivate the authentic one first, deliberately), and TEST templates
+   cannot be activated at all once production issuance is enabled.
+4. Production use still requires an *authentic* active version **and** `CERT_PRODUCTION_ISSUANCE_ENABLED=true`
+   (off). Nothing in Phase 5 fills, prints, generates or sends a certificate.
+
+Uploads, submissions, activations, retirements, rejections, deactivations and downloads are audited with
+version ids, hashes and counts only — never filenames (the office's sample files are named after students)
+or document content.
+
+To try it with a synthetic test file (no Gradtwin content):
+
+```powershell
+.venv\Scripts\python manage.py make_test_template offer_letter test-offer.docx
+```
+
+Open questions before Phase 6 fills real templates: pronouns for students whose gender is *Others*; how the
+salutation/LOR short name is entered; and whether a reference number is printed (`{{ reference_no }}`).
+
+Phase 5 tests only:
+
+```powershell
+.venv\Scripts\python -m pytest tests	est_templates.py
+.venv\Scripts\python -m pytest -m browser testsrowser	est_templates_browser.py
+```
+
 ### Registration policy settings
 
 Defaults live in `apps/core/policy.py` and can be overridden per key in the `Setting` table
@@ -168,6 +223,9 @@ docker compose exec web python manage.py migrate
 docker compose exec web python manage.py sync_roles
 docker compose exec web python manage.py create_admin hr@example.com --role "Super Admin"
 ```
+
+Limit request bodies at the proxy as well (template uploads are at most 5 MB; e.g. nginx
+`client_max_body_size 6m;`). The app also refuses oversized uploads (HTTP 413) before parsing them.
 
 Put a TLS-terminating reverse proxy in front of port 8000 and set `TRUSTED_PROXY_COUNT` to the number of
 proxies that append to `X-Forwarded-For` (one nginx/Caddy => `1`). This must be exact: with `0` behind a proxy,
@@ -228,7 +286,8 @@ apps/registry      Domain, Campaign, Student, StudentEmail, Submission, Duplicat
                    (HR review, duplicates, correction links)
 apps/internships   Internship, AttendancePeriod, Recommendation; services.py (completion, project,
                    attendance, recommendation), views.py (HR internship page)
-apps/doctemplates  CertificateTemplate, TemplateVersion, TemplateField
+apps/doctemplates  CertificateTemplate, TemplateVersion, TemplateField; placeholders.py (approved list),
+                   docx.py (safe .docx inspection + preview), services.py (upload/review/activation), views.py
 apps/certificates  approvals.py (per-certificate prerequisites and decisions); CertificateRequest, Issuance, GeneratedFile, EmailJob, EmailAttempt, PrintEvent, Handover
 docs/data-model.md ER diagram and database-enforced rules
 ```

@@ -12,7 +12,7 @@ from pytest_django.plugin import blocking_manager_key
 def _private_storage(settings):
     path = tempfile.mkdtemp(prefix="gradtwin-test-")
     settings.STORAGES = {**settings.STORAGES,
-                         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage",
+                         "default": {"BACKEND": "apps.core.storage.PrivateFileSystemStorage",
                                      "OPTIONS": {"location": path, "base_url": None}}}
     yield
     shutil.rmtree(path, ignore_errors=True)

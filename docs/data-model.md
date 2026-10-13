@@ -41,6 +41,7 @@ erDiagram
 | One request per certificate type per internship | `one_request_per_type_per_internship` |
 | One active template version per type | partial unique `one_active_version_per_template` |
 | Active template must have an approver | `active_version_requires_approval` |
+| Pending template versions have a submitter; rejected/retired ones a closer and reason; every version a file hash | `pending_version_has_submitter`, `closed_version_has_actor_and_reason`, `version_has_file_hash` |
 | One live (draft or issued) issuance per request | partial unique `one_live_issuance_per_request` |
 | "Issued" only with a generated PDF and issue date | `issued_requires_generated_pdf` |
 | Reissue must state a reason | `reissue_requires_reason` |

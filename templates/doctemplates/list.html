@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Certificate templates{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <h1 style="margin:0">Certificate templates</h1>
+  {% if perms.doctemplates.upload_template %}<a class="button" style="margin:0" href="{% url 'doctemplates:upload' %}">Upload a template version</a>{% endif %}
+</div>
+<p class="help">Only the original Gradtwin Word templates should be marked as authentic. Templates are activated by a Super Admin after review; production issuance also stays switched off until it is enabled separately.</p>
+{% for t in templates %}
+  <h2>{{ t.get_cert_type_display }}</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Version</th><th>Status</th><th>Kind</th><th>Uploaded</th><th>Placeholders</th></tr></thead>
+    <tbody>
+    {% for v in t.versions.all %}
+      <tr>
+        <td><a href="{% url 'doctemplates:version' v.pk %}">v{{ v.version }}</a></td>
+        <td><span class="badge {% if v.status == 'active' %}active{% elif v.status == 'pending_approval' %}pending{% elif v.status == 'rejected' %}inactive{% endif %}">{{ v.get_status_display }}</span></td>
+        <td>{% if v.is_production %}Authentic Gradtwin template{% else %}<strong>TEST</strong> – not for issue{% endif %}</td>
+        <td>{{ v.uploaded_at|date:"j M Y, H:i" }} · {{ v.uploaded_by }}</td>
+        <td>{{ v.inspection.placeholders|length }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="muted">No template uploaded yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+{% endfor %}
+{% endblock %}

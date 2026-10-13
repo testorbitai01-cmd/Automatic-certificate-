@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ v.template.get_cert_type_display }} v{{ v.version }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'doctemplates:list' %}">← All templates</a></p>
+<h1>{{ v.template.get_cert_type_display }} – version {{ v.version }}
+  <span class="badge {% if v.status == 'active' %}active{% elif v.status == 'pending_approval' %}pending{% endif %}">{{ v.get_status_display }}</span></h1>
+{% if not v.is_production %}<div class="alert-error"><strong>TEST TEMPLATE – NOT FOR ISSUE.</strong> This version can never be used for production certificates.</div>{% endif %}
+
+<div class="row" style="align-items:start">
+  <section class="card">
+    <dl class="details">
+      <dt>Kind</dt><dd>{% if v.is_production %}Authentic Gradtwin template{% else %}Test template{% endif %}</dd>
+      <dt>Uploaded</dt><dd>{{ v.uploaded_at|date:"j M Y, H:i" }} by {{ v.uploaded_by }}</dd>
+      <dt>File</dt><dd>{{ v.source_size|filesizeformat }} · SHA-256 <code>{{ v.source_sha256|truncatechars:20 }}</code></dd>
+      <dt>Images in file</dt><dd>{{ v.inspection.image_count }} (logo, signature, seal etc. — not shown in the text preview)</dd>
+      {% if v.submitted_by %}<dt>Submitted</dt><dd>{{ v.submitted_at|date:"j M Y, H:i" }} by {{ v.submitted_by }}</dd>{% endif %}
+      {% if v.approved_by %}<dt>Approved</dt><dd>{{ v.approved_at|date:"j M Y, H:i" }} by {{ v.approved_by }}{% if v.approval_note %} — {{ v.approval_note }}{% endif %}</dd>{% endif %}
+      {% if v.closed_by %}<dt>{{ v.get_status_display }}</dt><dd>{{ v.closed_at|date:"j M Y, H:i" }} by {{ v.closed_by }} — {{ v.close_reason }}</dd>{% endif %}
+      {% if v.notes %}<dt>Notes</dt><dd>{{ v.notes }}</dd>{% endif %}
+    </dl>
+    <a class="button secondary small-button" href="{% url 'doctemplates:download' v.pk %}">Download original .docx</a>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0">Placeholders</h2>
+    <ul>{% for p in used %}<li><code>{% templatetag openvariable %} {{ p.name }} {% templatetag closevariable %}</code> — {{ p.label }} <span class="help">← {{ p.source }}</span></li>{% endfor %}</ul>
+    {% if unused %}<p class="help">Available but not used: {% for p in unused %}<code>{{ p.name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  </section>
+</div>
+
+<h2>Actions</h2>
+<div class="card">
+  {% if v.status == S.DRAFT and perms.doctemplates.upload_template %}
+    <form method="post" action="{% url 'doctemplates:action' v.pk %}" class="inline">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ v.status }}">
+      <button name="action" value="submit">Submit for Super Admin review</button>
+    </form>
+  {% endif %}
+  {% if perms.doctemplates.approve_template %}
+    {% if v.status == S.PENDING_APPROVAL or v.status == S.RETIRED %}{% if not may_approve %}
+      <p class="help">You uploaded this version, so another Super Admin must approve and activate it.</p>
+    {% else %}
+      <form method="post" action="{% url 'doctemplates:action' v.pk %}">{% csrf_token %}
+        <input type="hidden" name="expected_status" value="{{ v.status }}">
+        <label><input type="checkbox" name="confirm_compared" required> I compared this version and its preview with the original Gradtwin template; wording, branding, signature and seal are unchanged.</label>
+        <label for="a-note">Approval note (optional)</label>
+        <input type="text" id="a-note" name="note" maxlength="2000">
+        <button name="action" value="activate">Approve and activate{% if active and active.pk != v.pk %} (retires v{{ active.version }}){% endif %}</button>
+      </form>
+    {% endif %}{% endif %}
+    {% if v.status == S.DRAFT or v.status == S.PENDING_APPROVAL %}
+      <form method="post" action="{% url 'doctemplates:action' v.pk %}">{% csrf_token %}
+        <input type="hidden" name="expected_status" value="{{ v.status }}">
+        <label for="r-reason">Reject (reason required)</label>
+        <textarea id="r-reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button class="danger" name="action" value="reject">Reject version</button>
+      </form>
+    {% endif %}
+    {% if v.status == S.ACTIVE %}
+      <form method="post" action="{% url 'doctemplates:action' v.pk %}">{% csrf_token %}
+        <input type="hidden" name="expected_status" value="{{ v.status }}">
+        <label for="d-reason">Deactivate (reason required)</label>
+        <textarea id="d-reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button class="danger" name="action" value="deactivate">Deactivate</button>
+      </form>
+    {% endif %}
+  {% elif v.status == S.PENDING_APPROVAL %}
+    <p class="help">Waiting for a Super Admin to review and activate this version.</p>
+  {% endif %}
+  <p class="help">Reasons and notes are kept permanently in the audit history.</p>
+</div>
+
+<h2>Preview with synthetic data</h2>
+<div class="card preview" style="border:2px dashed var(--warn)">
+  <p class="badge scheduled" style="font-size:14px">PREVIEW — SYNTHETIC SAMPLE DATA — NOT A CERTIFICATE</p>
+  <p class="help">Text only, in document order, with placeholders replaced by sample values (highlighted). Fonts, layout, images, signature and seal are not shown. Nothing is generated, saved or sent.</p>
+  {% if preview_error %}<div class="alert-error">{{ preview_error }}</div>{% endif %}
+  {% for label, paragraphs in preview %}
+    <h3>{{ label }}</h3>
+    {% for segments in paragraphs %}
+      <p style="white-space:pre-wrap">{% for text, name in segments %}{% if name %}<mark title="{{ name }}">{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endblock %}

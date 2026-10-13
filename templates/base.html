@@ -74,6 +74,7 @@
         {% if perms.registry.view_submission %}<a href="{% url 'registry:submission_list' %}">Submissions</a>{% endif %}
         {% if perms.registry.view_campaign %}<a href="{% url 'registry:campaign_list' %}">Campaigns</a>{% endif %}
         {% if perms.registry.view_domain %}<a href="{% url 'registry:domain_list' %}">Domains</a>{% endif %}
+        {% if perms.doctemplates.view_templateversion %}<a href="{% url 'doctemplates:list' %}">Templates</a>{% endif %}
       </nav>
       <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
         <span class="muted">{{ user.email }}</span> · <button class="link-button" type="submit">Sign out</button>

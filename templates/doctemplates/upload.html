@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Upload template{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>Upload a certificate template</h1>
+{% if errors %}<div class="alert-error" role="alert">{{ errors }}</div>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card" novalidate>
+  {% csrf_token %}
+  <label for="cert_type">Certificate type</label>
+  <select id="cert_type" name="cert_type" required>
+    <option value="">Select</option>
+    {% for value, label in types %}<option value="{{ value }}"{% if posted.cert_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <label for="file">Template file (.docx, max 5 MB)</label>
+  <input type="file" id="file" name="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+  <p class="help">Use the original Gradtwin Word template with the student-specific text replaced by approved placeholders such as <code>{% templatetag openvariable %} full_name {% templatetag closevariable %}</code>. Do not change any official wording, logo, signature or seal.</p>
+  <label><input type="checkbox" name="is_production"{% if posted.is_production %} checked{% endif %}> This is an authentic Gradtwin template (leave unticked for test templates)</label>
+  <label for="notes">Notes (optional)</label>
+  <textarea id="notes" name="notes" rows="2" maxlength="2000">{{ posted.notes }}</textarea>
+  <button type="submit">Upload as draft</button>
+  <a class="button secondary" href="{% url 'doctemplates:list' %}">Cancel</a>
+</form>
+
+<h2>Approved placeholders</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Placeholder</th><th>Meaning</th><th>Certificate types</th></tr></thead>
+  <tbody>
+  {% for p in registry %}
+    <tr><td><code>{% templatetag openvariable %} {{ p.name }} {% templatetag closevariable %}</code></td><td>{{ p.label }}</td>
+      <td class="help">{% if p.types|length == 4 %}All{% else %}{% for t in p.types %}{{ t }} {% endfor %}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}
