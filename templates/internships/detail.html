@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Internship – {{ i.student.full_name }}{% endblock %}
+{% block content %}
+{% if i.submission_id %}<p><a href="{% url 'registry:submission_detail' i.submission_id %}">← Submission</a></p>{% endif %}
+<h1>{{ i.student.title }} {{ i.student.full_name }} · {{ i.domain }}</h1>
+<p class="help">Decision notes and reasons are kept permanently in the audit history. Do not include personal details beyond what the decision needs.</p>
+<p class="muted">Registration status: <strong>{{ i.submission.get_status_display|default:"—" }}</strong>.
+  Registration is not proof of completion; each decision below is recorded separately.</p>
+
+<h2 id="completion">Internship completion</h2>
+<div class="card">
+  <p>Status: <span class="badge">{{ i.get_completion_status_display }}</span>
+    {% if i.completion_verified_by %}· {{ i.completion_verified_by }}, {{ i.completion_verified_at|date:"j M Y, H:i" }}{% endif %}</p>
+  {% if i.completion_note %}<p class="help">{{ i.completion_note|linebreaksbr }}</p>{% endif %}
+  {% if perms.internships.verify_completion %}
+  <form method="post" action="{% url 'internships:completion' i.pk %}">{% csrf_token %}
+    <input type="hidden" name="expected_status" value="{{ i.completion_status }}">
+    <div class="row">
+      <div><label for="c-start">Verified start date</label><input type="date" id="c-start" name="start_date" value="{{ i.start_date|date:'Y-m-d' }}" required></div>
+      <div><label for="c-end">Verified end date</label><input type="date" id="c-end" name="end_date" value="{{ i.end_date|date:'Y-m-d' }}" required></div>
+    </div>
+    <label for="c-note">Verification note (required if not completed)</label>
+    <textarea id="c-note" name="note" rows="2" maxlength="2000"></textarea>
+    <button name="decision" value="{{ C.VERIFIED }}">Completion verified</button>
+    <button class="danger" name="decision" value="{{ C.NOT_COMPLETED }}">Not completed</button>
+  </form>
+  {% endif %}
+</div>
+
+<h2 id="project">Project</h2>
+<div class="card">
+  <p><strong>{{ i.project_title|default:"No project title" }}</strong> · <span class="badge">{{ i.get_project_status_display }}</span>
+    {% if i.project_verified_by %}· {{ i.project_verified_by }}, {{ i.project_verified_at|date:"j M Y, H:i" }}{% endif %}</p>
+  {% if i.project_note %}<p class="help">{{ i.project_note|linebreaksbr }}</p>{% endif %}
+  {% if perms.internships.verify_project %}
+  <form method="post" action="{% url 'internships:project' i.pk %}">{% csrf_token %}
+    <input type="hidden" name="expected_status" value="{{ i.project_status }}">
+    <label for="p-note">Note (required if not accepted)</label>
+    <textarea id="p-note" name="note" rows="2" maxlength="2000"></textarea>
+    <button name="decision" value="{{ P.VERIFIED }}">Project completed</button>
+    <button class="danger" name="decision" value="{{ P.REJECTED }}">Not accepted</button>
+  </form>
+  <p class="help">To change the title, request a correction from the student on the submission page.</p>
+  {% endif %}
+</div>
+
+<h2 id="attendance">Attendance history</h2>
+<div class="card">
+  <p class="help">History only. Attendance mode does not affect certificate eligibility, wording or delivery method.</p>
+  {% if attendance %}<table><thead><tr><th>From</th><th>To</th><th>Mode</th></tr></thead><tbody>
+    {% for a in attendance %}<tr><td>{{ a.from_date|date:"j M Y" }}</td><td>{{ a.to_date|date:"j M Y" }}</td><td>{{ a.get_mode_display }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="muted">No attendance periods recorded.</p>{% endif %}
+  {% if perms.internships.verify_completion %}
+  <form method="post" action="{% url 'internships:attendance' i.pk %}" class="row" style="align-items:end">{% csrf_token %}
+    <div><label for="a-from">From</label><input type="date" id="a-from" name="from_date" required></div>
+    <div><label for="a-to">To</label><input type="date" id="a-to" name="to_date" required></div>
+    <div><label for="a-mode">Mode</label><select id="a-mode" name="mode">{% for v, l in modes %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+    <div><button class="secondary">Add period</button></div>
+  </form>
+  {% endif %}
+</div>
+
+<h2 id="recommendation">LOR recommendation</h2>
+<div class="card">
+  <p>Decision: <span class="badge">{{ recommendation.get_decision_display|default:"Pending" }}</span>
+    {% if recommendation.decided_by %}· {{ recommendation.decided_by }}, {{ recommendation.decided_at|date:"j M Y, H:i" }}{% endif %}</p>
+  {% if recommendation.mentor_name %}<p class="help">Mentor: {{ recommendation.mentor_name }}</p>{% endif %}
+  {% if perms.internships.decide_recommendation %}
+  <form method="post" action="{% url 'internships:recommendation' i.pk %}">{% csrf_token %}
+    <input type="hidden" name="expected_decision" value="{{ recommendation.decision|default:'pending' }}">
+    <label for="r-mentor">Mentor / supervisor</label>
+    <input type="text" id="r-mentor" name="mentor_name" maxlength="150" value="{{ recommendation.mentor_name }}">
+    <label for="r-feedback">Mentor feedback (required to recommend)</label>
+    <textarea id="r-feedback" name="mentor_feedback" rows="2">{{ recommendation.mentor_feedback }}</textarea>
+    <label for="r-eval">Performance evaluation (required to recommend)</label>
+    <textarea id="r-eval" name="performance_evaluation" rows="2">{{ recommendation.performance_evaluation }}</textarea>
+    <button name="decision" value="{{ R.RECOMMENDED }}">Recommend</button>
+    <button class="danger" name="decision" value="{{ R.NOT_RECOMMENDED }}">Do not recommend</button>
+  </form>
+  {% endif %}
+</div>
+
+<h2 id="certificates">Certificate approvals</h2>
+<p class="help">Each certificate is approved separately. Approval does not create or send any document.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Certificate</th><th>Status</th><th>Requirements</th>{% if perms.certificates.approve_certificate %}<th>Decision</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for c in certificates %}
+    <tr id="cert-{{ c.type }}">
+      <td>{{ c.label }}</td>
+      <td><span class="badge status-{{ c.status }}">{{ c.status_label }}</span>
+        {% if c.request.decided_by %}<div class="help">{{ c.request.decided_by }}, {{ c.request.decided_at|date:"j M Y, H:i" }}</div>{% endif %}
+        {% if c.request.reason %}<div class="help">{{ c.request.reason }}</div>{% endif %}
+        {% if c.unauthorised_approval %}<div class="field-error">Approved by an account without final LOR authority (before the Super-Admin-only rule). A Super Admin must review it.</div>{% endif %}</td>
+      <td>{% if c.unmet %}<ul class="unmet">{% for u in c.unmet %}<li class="help">{{ u }}</li>{% endfor %}</ul>{% else %}<span class="badge active">All requirements met</span>{% endif %}</td>
+      {% if perms.certificates.approve_certificate %}
+      <td>
+        {% if c.locked %}<span class="help">A certificate already exists; changes need the reissue process.</span>
+        {% elif not c.can_decide %}<span class="help">Final decision by a Super Admin.</span>{% else %}
+        <form method="post" action="{% url 'internships:certificate_decision' i.pk c.type %}">{% csrf_token %}
+          <input type="hidden" name="expected_status" value="{{ c.status }}">
+          <input type="text" name="reason" placeholder="Reason (required except to approve)" aria-label="Reason" maxlength="2000">
+          {% if c.status != "approved" %}<button class="small-button" name="decision" value="approve"{% if c.unmet %} disabled title="Requirements not met"{% endif %}>Approve</button>{% endif %}
+          <button class="small-button danger" name="decision" value="reject">Reject</button>
+          <button class="small-button secondary" name="decision" value="request_correction">Needs correction</button>
+          {% if c.status != "pending" %}<button class="small-button secondary" name="decision" value="reset">Reset to pending</button>{% endif %}
+        </form>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>History</h2>
+{% include "core/_history.html" %}
+{% endblock %}

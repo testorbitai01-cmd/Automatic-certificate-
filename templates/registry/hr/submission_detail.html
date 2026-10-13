@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ student.full_name }} – submission{% endblock %}
+{% block content %}
+<p><a href="{% url 'registry:submission_list' %}">← All submissions</a></p>
+<h1>{{ student.title }} {{ student.full_name }} <span class="badge status-{{ sub.status }}">{{ sub.get_status_display }}</span></h1>
+<p class="muted">Campaign <a href="{% url 'registry:campaign_detail' sub.campaign_id %}">{{ sub.campaign.name }}</a> · submitted {{ sub.submitted_at|date:"j F Y, g:i A" }}
+  {% if sub.reviewed_by %} · last decision by {{ sub.reviewed_by }} on {{ sub.reviewed_at|date:"j M Y, H:i" }}{% endif %}</p>
+{% if sub.status_reason %}<div class="card" style="margin-bottom:16px"><strong>Reason / note:</strong> {{ sub.status_reason|linebreaksbr }}</div>{% endif %}
+
+<div class="row" style="align-items:start">
+  <section class="card">
+    <h2 style="margin-top:0">Registration details</h2>
+    <dl class="details">
+      <dt>Gender</dt><dd>{{ student.get_gender_display }}{% if student.gender_detail %} ({{ student.gender_detail }}){% endif %}</dd>
+      <dt>Mobile</dt><dd>{{ student.mobile }}</dd>
+      <dt>University reg. no</dt><dd>{{ student.reg_no }}</dd>
+      {% for e in emails %}<dt>{{ e.get_kind_display }} email</dt><dd>{{ e.address }} {% if e.is_verified %}<span class="badge active">verified</span>{% else %}<span class="badge">not verified</span>{% endif %}</dd>{% endfor %}
+      <dt>Degree</dt><dd>{{ student.degree }}</dd>
+      <dt>College</dt><dd>{{ student.college_name }}, {{ student.college_location }}</dd>
+    </dl>
+    {% if sub.review_notes %}<h3>Validation notes</h3><ul>{% for n in sub.review_notes %}<li class="help">{{ n }}</li>{% endfor %}</ul>{% endif %}
+    {% if sub.feedback %}<h3>Internship feedback</h3><p>{{ sub.feedback|linebreaksbr }}</p>{% endif %}
+    <details><summary class="help">Values exactly as the student typed them</summary>
+      <dl class="details">{% for k, v in sub.raw_payload.items %}{% if v %}<dt>{{ k }}</dt><dd><code>{{ v }}</code></dd>{% endif %}{% endfor %}</dl>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Internship</h2>
+    {% for i in internships %}
+      <dl class="details">
+        <dt>Domain</dt><dd>{{ i.domain }}{% if i.domain.status != "active" %} <span class="badge pending">{{ i.domain.get_status_display }}</span>{% endif %}</dd>
+        <dt>Period (as registered)</dt><dd>{{ i.start_date|date:"j M Y" }} – {{ i.end_date|date:"j M Y" }}</dd>
+        <dt>Project</dt><dd>{{ i.project_title|default:"—" }}</dd>
+        <dt>Completion</dt><dd>{{ i.get_completion_status_display }}</dd>
+      </dl>
+      {% if perms.internships.view_internship %}<a class="button secondary small-button" href="{% url 'internships:detail' i.pk %}">Completion, recommendation and certificates →</a>{% endif %}
+    {% endfor %}
+  </section>
+</div>
+
+{% if perms.registry.review_submission %}
+<h2 id="decision">Decision</h2>
+<div class="card">
+  <p class="help">Reasons and notes are kept permanently in the audit history. Do not include personal details beyond what the decision needs.</p>
+  {% if sub.status == S.SUBMITTED or sub.status == S.UNDER_REVIEW %}
+    {% if sub.status == S.SUBMITTED %}
+      <form method="post" action="{% url 'registry:submission_action' sub.pk %}" class="inline">{% csrf_token %}
+        <input type="hidden" name="expected_status" value="{{ sub.status }}">
+        <button class="secondary" name="action" value="start_review">Mark as under review</button>
+      </form>
+    {% endif %}
+    <form method="post" action="{% url 'registry:submission_action' sub.pk %}">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ sub.status }}">
+      <label for="approve-note">Approve (optional note)</label>
+      <input type="text" id="approve-note" name="reason" maxlength="2000">
+      <button name="action" value="approve">Approve details</button>
+    </form>
+    <form method="post" action="{% url 'registry:submission_action' sub.pk %}">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ sub.status }}">
+      <label for="reject-reason">Reject (reason required)</label>
+      <textarea id="reject-reason" name="reason" rows="2" maxlength="2000" required></textarea>
+      <button class="danger" name="action" value="reject">Reject</button>
+    </form>
+  {% endif %}
+
+  {% if sub.status == S.SUBMITTED or sub.status == S.UNDER_REVIEW or sub.status == S.VERIFIED %}
+    <form method="post" action="{% url 'registry:submission_action' sub.pk %}" id="correction-form">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ sub.status }}">
+      <span class="label">Request corrections from the student</span>
+      <div class="radio-row">{% for key, item in correctable.items %}<label><input type="checkbox" name="fields" value="{{ key }}"> {{ item.0 }}</label>{% endfor %}</div>
+      <label for="correction-reason">What needs to change (shown to the student)</label>
+      <textarea id="correction-reason" name="reason" rows="2" maxlength="2000" required></textarea>
+      <button class="secondary" name="action" value="request_correction">Request correction and create link</button>
+      {% if sub.status == S.VERIFIED %}<p class="help">Any certificate approvals for this student are withdrawn when corrections are requested.</p>{% endif %}
+    </form>
+  {% endif %}
+
+  {% if sub.status == S.CORRECTION_REQUESTED %}
+    <p>Waiting for the student to correct their details.</p>
+    <form method="post" action="{% url 'registry:submission_action' sub.pk %}" class="inline">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ sub.status }}">
+      <button class="secondary" name="action" value="regenerate_link">Create a new link (old link stops working)</button>
+      <button class="secondary" name="action" value="cancel_correction">Cancel correction request</button>
+    </form>
+  {% endif %}
+
+  {% if sub.status == S.VERIFIED or sub.status == S.REJECTED %}
+    <form method="post" action="{% url 'registry:submission_action' sub.pk %}">{% csrf_token %}
+      <input type="hidden" name="expected_status" value="{{ sub.status }}">
+      <label for="reopen-reason">Reopen for review (reason required)</label>
+      <textarea id="reopen-reason" name="reason" rows="2" maxlength="2000" required></textarea>
+      <button class="secondary" name="action" value="reopen">Reopen</button>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2 id="duplicates">Possible duplicates ({{ flags|length }})</h2>
+{% if flags %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Matches</th><th>Reason</th><th>Decision</th>{% if perms.registry.resolve_duplicate %}<th>Record decision</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for fl in flags %}
+    <tr>
+      <td><a href="{% url 'registry:submission_detail' fl.matches_id %}">{{ fl.matches.student.full_name }}</a><div class="help">{{ fl.matches.campaign.name }} · {{ fl.matches.get_status_display }}</div></td>
+      <td>{{ fl.get_reason_display }}</td>
+      <td><span class="badge {% if fl.resolution == 'pending' or fl.resolution == 'further_review' %}flag{% endif %}">{{ fl.get_resolution_display }}</span>
+        {% if fl.resolved_by %}<div class="help">{{ fl.resolved_by }}, {{ fl.resolved_at|date:"j M Y, H:i" }}: {{ fl.resolution_reason }}</div>{% endif %}</td>
+      {% if perms.registry.resolve_duplicate %}
+      <td>
+        <form method="post" action="{% url 'registry:duplicate_resolve' fl.pk %}">{% csrf_token %}
+          <input type="hidden" name="expected_resolution" value="{{ fl.resolution }}">
+          <select name="resolution" aria-label="Decision">{% for v, l in duplicate_choices %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+          <input type="text" name="reason" placeholder="Reason (required)" aria-label="Reason" required maxlength="2000">
+          <button class="small-button">Save</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="help">Decisions never merge or delete records. Open or “further review” flags block approval.</p>
+{% else %}<p class="muted">No possible duplicates were flagged.</p>{% endif %}
+
+{% if flagged_by %}
+<h3>Later submissions flagged against this one</h3>
+<ul>{% for fl in flagged_by %}<li><a href="{% url 'registry:submission_detail' fl.submission_id %}">{{ fl.submission.student.full_name }}</a>
+  <span class="help">{{ fl.submission.campaign.name }} · {{ fl.get_reason_display }} · {{ fl.get_resolution_display }}</span></li>{% endfor %}</ul>
+{% endif %}
+
+{% if corrections %}
+<h2>Correction requests</h2>
+{% for c in corrections %}
+  <div class="card" style="margin-bottom:8px">
+    <strong>{{ c.get_status_display }}</strong> · requested by {{ c.requested_by }} on {{ c.requested_at|date:"j M Y, H:i" }}
+    {% if c.status == "open" %} · link expires {{ c.expires_at|date:"j M Y, H:i" }}{% endif %}
+    <div class="help">Fields: {% for g in c.fields %}{{ g }}{% if not forloop.last %}, {% endif %}{% endfor %} — {{ c.reason }}</div>
+    {% if c.changes %}<table style="margin-top:8px"><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead><tbody>
+      {% for field, change in c.changes.items %}<tr><td>{{ field }}</td><td>{{ change.old }}</td><td>{{ change.new }}</td></tr>{% endfor %}
+    </tbody></table>{% elif c.status == "completed" %}<div class="help">Resubmitted without changes.</div>{% endif %}
+  </div>
+{% endfor %}
+{% endif %}
+
+<h2 id="notes">Internal HR notes</h2>
+{% for n in notes %}<div class="card" style="margin-bottom:8px"><div class="help">{{ n.author }} · {{ n.created_at|date:"j M Y, H:i" }}</div>{{ n.text|linebreaksbr }}</div>{% empty %}<p class="muted">No notes yet.</p>{% endfor %}
+{% if perms.registry.review_submission %}
+<form method="post" action="{% url 'registry:submission_add_note' sub.pk %}">{% csrf_token %}
+  <label for="note-text">Add a note (visible to HR only)</label>
+  <textarea id="note-text" name="text" rows="2" maxlength="4000" required></textarea>
+  <button class="secondary">Add note</button>
+</form>
+{% endif %}
+
+<h2>History</h2>
+{% include "core/_history.html" %}
+{% endblock %}

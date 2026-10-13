@@ -222,3 +222,29 @@ class DomainRenameForm(forms.Form):
         if clash.exists():
             raise forms.ValidationError("A domain with this name already exists.")
         return name
+
+
+class CorrectionForm(RegistrationForm):
+    """Student correction form: only the fields HR asked to correct, with the same validation as registration."""
+
+    def __init__(self, *args, allowed_fields, current, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.current = current
+        for name in list(self.fields):
+            if name not in allowed_fields:
+                del self.fields[name]
+        if "domain" in self.fields:
+            # Corrections choose from active domains only; new domain requests go through HR.
+            self.fields["domain"].choices = [c for c in self.fields["domain"].choices if c[0] != REQUEST_NEW_DOMAIN]
+        if not self.is_bound:
+            self.initial = {name: current.get(name) for name in self.fields}
+
+    def clean(self):
+        data = super().clean()
+        # Cross-checks against values that are not being corrected.
+        if "alternate_email" in self.fields and "email" not in self.fields:
+            alt = data.get("alternate_email")
+            if alt and alt == self.current.get("email"):
+                self.add_error("alternate_email", "This is the same as your registered email. "
+                                                  "Enter a different address or leave it blank.")
+        return data

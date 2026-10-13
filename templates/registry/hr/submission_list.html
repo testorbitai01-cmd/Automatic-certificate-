@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Submissions{% endblock %}
+{% block content %}
+<h1>Submissions</h1>
+<form method="get" class="card filters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0 12px;align-items:end">
+  <div><label for="q">Search</label><input type="text" id="q" name="q" value="{{ filters.q }}" placeholder="Name, reg. no, email, mobile, college"></div>
+  <div><label for="f-campaign">Campaign</label>
+    <select id="f-campaign" name="campaign"><option value="">All</option>
+      {% for c in campaigns %}<option value="{{ c.pk }}"{% if filters.campaign == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select></div>
+  <div><label for="f-domain">Domain</label>
+    <select id="f-domain" name="domain"><option value="">All</option>
+      {% for d in domains %}<option value="{{ d.pk }}"{% if filters.domain == d.pk|stringformat:"s" %} selected{% endif %}>{{ d.name }}{% if d.status != "active" %} ({{ d.get_status_display|lower }}){% endif %}</option>{% endfor %}
+    </select></div>
+  <div><label for="f-status">Status</label>
+    <select id="f-status" name="status"><option value="">All</option>
+      {% for value, label in statuses %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></div>
+  <div><label for="f-dup">Duplicate review</label>
+    <select id="f-dup" name="duplicates">
+      <option value="">All</option>
+      <option value="open"{% if filters.duplicates == "open" %} selected{% endif %}>Has open flags</option>
+      <option value="further_review"{% if filters.duplicates == "further_review" %} selected{% endif %}>Needs further review</option>
+      <option value="none"{% if filters.duplicates == "none" %} selected{% endif %}>No open flags</option>
+    </select></div>
+  <div><button type="submit">Filter</button> <a class="button secondary" href="{% url 'registry:submission_list' %}">Clear</a></div>
+</form>
+
+<p class="muted">{{ page.paginator.count }} submission{{ page.paginator.count|pluralize }}</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Submitted</th><th>Name</th><th>Reg. No</th><th>Campaign</th><th>Domain</th><th>Status</th><th>Duplicates</th></tr></thead>
+  <tbody>
+  {% for s in page %}
+    <tr>
+      <td>{{ s.submitted_at|date:"j M Y, H:i" }}</td>
+      <td><a href="{% url 'registry:submission_detail' s.pk %}">{{ s.student.title }} {{ s.student.full_name }}</a></td>
+      <td>{{ s.student.reg_no }}</td>
+      <td>{{ s.campaign.name }}</td>
+      <td>{% for i in s.internships.all %}{{ i.domain }}{% if i.domain.status == "pending" %} <span class="badge pending">pending</span>{% endif %}{% endfor %}</td>
+      <td><span class="badge status-{{ s.status }}">{{ s.get_status_display }}</span></td>
+      <td>{% if s.open_flags %}<span class="badge flag">{{ s.open_flags }} open</span>{% else %}—{% endif %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="7" class="muted">No submissions match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if page.has_other_pages %}
+<p>
+  {% if page.has_previous %}<a href="?{{ querystring }}&page={{ page.previous_page_number }}">← Previous</a>{% endif %}
+  <span class="muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?{{ querystring }}&page={{ page.next_page_number }}">Next →</a>{% endif %}
+</p>
+{% endif %}
+{% endblock %}

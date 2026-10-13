@@ -26,6 +26,14 @@ def reg_no_key(value):
     return re.sub(r"[\s\-/._]", "", (value or "")).casefold()
 
 
+def _with_derived(kwargs, source, derived):
+    """When saving with update_fields, also save a key derived from a field being saved."""
+    fields = kwargs.get("update_fields")
+    if fields is not None and source in fields and derived not in fields:
+        kwargs["update_fields"] = [*fields, derived]
+    return kwargs
+
+
 def new_public_token():
     return secrets.token_urlsafe(24)
 
@@ -55,7 +63,7 @@ class Domain(models.Model):
     def save(self, *args, **kwargs):
         self.name = collapse_whitespace(self.name)
         self.normalized_key = comparison_key(self.name)
-        super().save(*args, **kwargs)
+        super().save(*args, **_with_derived(kwargs, "name", "normalized_key"))
 
     def __str__(self):
         return self.name
@@ -130,7 +138,7 @@ class Student(models.Model):
     def save(self, *args, **kwargs):
         self.reg_no = collapse_whitespace(self.reg_no)
         self.reg_no_key = reg_no_key(self.reg_no)
-        super().save(*args, **kwargs)
+        super().save(*args, **_with_derived(kwargs, "reg_no", "reg_no_key"))
 
     def __str__(self):
         return f"{self.title} {self.full_name}"
@@ -154,7 +162,7 @@ class StudentEmail(models.Model):
     def save(self, *args, **kwargs):
         self.address = self.address.strip()
         self.address_key = self.address.lower()
-        super().save(*args, **kwargs)
+        super().save(*args, **_with_derived(kwargs, "address", "address_key"))
 
     @property
     def is_verified(self):
@@ -197,6 +205,14 @@ class Submission(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["campaign", "student"], name="one_submission_per_student_per_campaign"),
             models.UniqueConstraint(fields=["campaign", "reg_no_key"], name="one_submission_per_reg_no_per_campaign"),
+            models.CheckConstraint(
+                condition=~Q(status__in=["rejected", "correction_requested"]) | ~Q(status_reason=""),
+                name="rejection_or_correction_requires_reason",
+            ),
+            models.CheckConstraint(
+                condition=~Q(status__in=["verified", "rejected"]) | Q(reviewed_by__isnull=False),
+                name="decision_requires_reviewer",
+            ),
         ]
         permissions = [("review_submission", "Can approve, reject or request corrections on submissions")]
 
@@ -221,11 +237,17 @@ class DuplicateCandidate(models.Model):
         PENDING = "pending", "Pending review"
         NOT_DUPLICATE = "not_duplicate", "Not a duplicate"
         DUPLICATE = "duplicate", "Confirmed duplicate"
+        FURTHER_REVIEW = "further_review", "Requires further review"
+
+    # Flags in these states block approval of the submission.
+    OPEN_RESOLUTIONS = (Resolution.PENDING, Resolution.FURTHER_REVIEW)
+    BLOCKING_RESOLUTIONS = (*OPEN_RESOLUTIONS, Resolution.DUPLICATE)
 
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="duplicate_flags")
     matches = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="+")
     reason = models.CharField(max_length=10, choices=Reason.choices)
     resolution = models.CharField(max_length=15, choices=Resolution.choices, default=Resolution.PENDING)
+    resolution_reason = models.TextField(blank=True)
     resolved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
@@ -236,5 +258,64 @@ class DuplicateCandidate(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["submission", "matches", "reason"], name="unique_duplicate_flag"),
             models.CheckConstraint(condition=~Q(submission=F("matches")), name="duplicate_not_self"),
+            models.CheckConstraint(
+                condition=Q(resolution="pending") | (Q(resolved_by__isnull=False) & ~Q(resolution_reason="")),
+                name="duplicate_decision_has_reviewer_and_reason",
+            ),
         ]
         permissions = [("resolve_duplicate", "Can resolve possible duplicate submissions")]
+
+
+class SubmissionNote(models.Model):
+    """Internal HR note on a submission. Never shown to students. Notes are not edited or deleted."""
+
+    submission = models.ForeignKey(Submission, on_delete=models.PROTECT, related_name="notes")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class CorrectionRequest(models.Model):
+    """HR request for the student to correct specific fields through a private link.
+
+    Only a SHA-256 hash of the link token is stored; the raw token is shown to HR once.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Awaiting student"
+        COMPLETED = "completed", "Corrected by student"
+        CANCELLED = "cancelled", "Cancelled"
+
+    submission = models.ForeignKey(Submission, on_delete=models.PROTECT, related_name="correction_requests")
+    fields = models.JSONField()  # list of correctable field names
+    reason = models.TextField()
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    requested_at = models.DateTimeField(auto_now_add=True)
+    # {field: {"old": ..., "new": ...}} for fields the student actually changed. Kept here, not in the audit log.
+    changes = models.JSONField(default=dict, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                     related_name="+")
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["submission"], condition=Q(status="open"),
+                                    name="one_open_correction_per_submission"),
+            models.CheckConstraint(condition=~Q(reason=""), name="correction_requires_reason"),
+            models.CheckConstraint(condition=~Q(status="completed") | Q(completed_at__isnull=False),
+                                   name="completed_correction_has_time"),
+            models.CheckConstraint(
+                condition=~Q(status="cancelled") | Q(cancelled_by__isnull=False, cancelled_at__isnull=False),
+                name="cancelled_correction_has_actor"),
+        ]
+
+    def is_usable(self, at=None):
+        return self.status == self.Status.OPEN and (at or timezone.now()) < self.expires_at

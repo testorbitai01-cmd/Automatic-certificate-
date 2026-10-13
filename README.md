@@ -15,7 +15,8 @@ for production certificates. Until they are provided, the system works with file
 | 2. Foundation (schema, auth, roles, audit, config, tests) | Done |
 | 3. QR registration campaigns and student form | Done |
 | 3.1 PostgreSQL + browser verification, shared rate limits | Done |
-| 4–10 | Not started |
+| 4. HR review, corrections, duplicates, completion and per-certificate approval | Done (awaiting review) |
+| 5–10 | Not started |
 
 ## Local development (Windows, PowerShell)
 
@@ -53,6 +54,65 @@ To test the QR code from a phone, run the server on your LAN address and tell th
 $env:PUBLIC_BASE_URL = "http://<your-PC-LAN-IP>:8000"
 $env:DJANGO_ALLOWED_HOSTS = "<your-PC-LAN-IP>,127.0.0.1,localhost"
 .venv\Scripts\python manage.py runserver 0.0.0.0:8000
+```
+
+### Phase 4 — HR review and approval workflow
+
+Nothing in this phase creates, downloads or sends a certificate. Production issuance stays disabled.
+
+1. **Submissions** (http://127.0.0.1:8000/hr/submissions/): search by name, registration number, email, mobile
+   or college; filter by campaign, domain, status and duplicate-review state.
+2. **Submission page**: full details (plus the values exactly as typed), validator notes, internal HR notes and
+   the full history (from the append-only audit log). Decisions:
+   * *Mark as under review* → *Approve details* (optional note) or *Reject* (reason required).
+   * *Request correction*: tick the fields the student must fix and explain why. A private link is shown
+     **once** (only its SHA-256 hash is stored). It expires after 7 days (`registration.correction_link_days`),
+     works once, lets the student change only the ticked fields, and runs the same validation as registration.
+     HR can create a new link (the old one stops working) or cancel the request. After the student resubmits,
+     the submission returns to *Submitted* and the before/after values are shown on the submission page.
+   * *Reopen* (reason required) moves a verified or rejected submission back to review.
+   * Approval is blocked while any possible-duplicate flag is *pending* or *requires further review*, or while
+     the requested domain is still pending.
+3. **Possible duplicates**: record *Confirmed duplicate*, *Not a duplicate* or *Requires further review* with a
+   reason. Records are never merged or deleted.
+4. **Internship page** (link from the submission): separate decisions, each with reviewer and time:
+   * *Completion* — verified actual dates, or *Not completed* (note required). Registration alone is never
+     treated as completion.
+   * *Project* — completed, or not accepted (note required). Title changes go through a student correction.
+   * *Attendance history* — online/offline periods for the record only; never used for eligibility or delivery.
+   * *LOR recommendation* — recommend (mentor feedback and performance evaluation required) or not.
+   * *Certificate approvals* — one row per certificate type with its unmet requirements:
+
+     | Certificate | Requires (in addition to verified registration, resolved duplicates, active domain) |
+     |---|---|
+     | Offer Letter | nothing else — may be approved before the internship starts |
+     | Experience / Internship | completion verified |
+     | Project Completion | project verified |
+     | LOR | completion verified **and** a *recommended* decision |
+
+     Approving one certificate never approves another. Reject / *needs correction* / reset need a reason.
+
+     **LOR final authority: Super Admin only.** HR Admins record the separate *recommendation* decision, but
+     every final LOR decision (approve, reject, needs correction, reset) requires the `certificates.approve_lor`
+     permission, which only the Super Admin role has. It is enforced in the service layer (a crafted request
+     from an HR Admin gets 403 and changes nothing). Automatic withdrawal still applies when HR changes the
+     underlying facts. To list LOR approvals made before this rule by accounts without that permission
+     (read-only; nothing is changed): `.venv\Scripts\python manage.py check_lor_approvals`.
+5. **Automatic withdrawal**: if the facts behind an approval change, the approval returns to *Pending* with an
+   audit entry — reopening or requesting corrections withdraws all four; a completion change withdraws
+   Experience and LOR; a project change withdraws Project; a recommendation change withdraws LOR. Once a
+   certificate has been created (Phase 6), these changes are refused and will need the reissue process.
+
+Every transition locks the record and checks the status the reviewer saw, so double clicks and two reviewers
+acting at once cannot both succeed. The audit log records decisions and reasons, but not passwords, tokens,
+note text, mentor feedback or corrected personal values.
+
+To try it: register a test student through a campaign link (see above), then sign in as HR and open
+**Submissions**. Phase 4 tests only:
+
+```powershell
+.venv\Scripts\python -m pytest tests\test_review.py tests\test_corrections.py tests\test_approvals.py
+.venv\Scripts\python -m pytest -m browser tests\browser\test_review_browser.py
 ```
 
 ### Registration policy settings
@@ -114,6 +174,32 @@ proxies that append to `X-Forwarded-For` (one nginx/Caddy => `1`). This must be 
 every student shares the proxy's IP address for rate limits; with a number that is too high, clients can spoof
 their IP. Also set `PUBLIC_BASE_URL` so QR codes encode the public address.
 
+### Keeping correction tokens out of logs
+
+Correction links contain a secret token in the path (`/correct/<token>/`).
+
+* **Django** (request warnings, development server): a logging filter replaces it with `/correct/[redacted]/`
+  (`apps/core/logging.py`, enabled in `config/settings.py`). Tested.
+* **Correction pages** send `Referrer-Policy: strict-origin` (other sites never see the path),
+  `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`, and load no third-party resources.
+* **Gunicorn**: its access log is off unless `--access-logfile` is given (the Dockerfile does not enable it).
+  If you enable it, do not log the request path for `/correct/`.
+* **Reverse proxy (required)**: nginx/Caddy log every request line by default. Disable access logging for the
+  correction path, e.g. for nginx:
+
+  ```nginx
+  location /correct/ {
+      access_log off;            # the path contains a one-time secret token
+      proxy_pass http://web:8000;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Host $host;
+  }
+  ```
+
+  Caddy: put `log_skip` (or a `skip_log` matcher on older versions) on `path /correct/*`.
+  Also check any CDN, load balancer or WAF in front of the proxy.
+
 ### Rate limiting
 
 Login lockout (5 failures per email+IP per 15 minutes) and the public form limit (30 POSTs per IP per hour) are
@@ -138,9 +224,11 @@ apps/accounts      staff users (email login, Argon2), roles, login throttling
 apps/core          append-only AuditLog, Setting, Job queue table
 apps/registry      Domain, Campaign, Student, StudentEmail, Submission, DuplicateCandidate;
                    validation.py (field rules), forms.py, services.py (submission + duplicate flags),
-                   views.py (public form, HR campaigns, QR, domains)
-apps/internships   Internship, AttendancePeriod, Recommendation
+                   views.py (public form, HR campaigns, QR, domains); review.py + views_review.py
+                   (HR review, duplicates, correction links)
+apps/internships   Internship, AttendancePeriod, Recommendation; services.py (completion, project,
+                   attendance, recommendation), views.py (HR internship page)
 apps/doctemplates  CertificateTemplate, TemplateVersion, TemplateField
-apps/certificates  CertificateRequest, Issuance, GeneratedFile, EmailJob, EmailAttempt, PrintEvent, Handover
+apps/certificates  approvals.py (per-certificate prerequisites and decisions); CertificateRequest, Issuance, GeneratedFile, EmailJob, EmailAttempt, PrintEvent, Handover
 docs/data-model.md ER diagram and database-enforced rules
 ```

@@ -28,8 +28,20 @@ class CertificateRequest(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["internship", "cert_type"], name="one_request_per_type_per_internship"),
+            models.CheckConstraint(
+                condition=Q(approval_status="pending") | Q(decided_by__isnull=False, decided_at__isnull=False),
+                name="certificate_decision_has_reviewer",
+            ),
+            models.CheckConstraint(
+                condition=~Q(approval_status__in=["rejected", "correction_requested"]) | ~Q(reason=""),
+                name="certificate_rejection_requires_reason",
+            ),
         ]
-        permissions = [("approve_certificate", "Can approve or reject individual certificates")]
+        permissions = [
+            ("approve_certificate", "Can approve or reject individual certificates"),
+            # Office rule: the final LOR decision is reserved for Super Admins.
+            ("approve_lor", "Can make the final decision on letters of recommendation"),
+        ]
 
     def __str__(self):
         return f"{self.get_cert_type_display()} – {self.internship.student}"

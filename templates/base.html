@@ -56,6 +56,13 @@
     .inline { display:inline; }
     code.url { word-break:break-all; background:var(--bg); padding:4px 6px; border-radius:4px; }
     .required-mark { color:var(--err); }
+    dl.details { display:grid; grid-template-columns:minmax(120px,max-content) 1fr; gap:4px 12px; margin:0 0 12px; }
+    dl.details dt { color:var(--muted); } dl.details dd { margin:0; word-break:break-word; }
+    .badge.status-verified, .badge.status-approved { background:var(--ok-bg); color:var(--ok); border-color:transparent; }
+    .badge.status-rejected { background:var(--err-bg); color:var(--err); border-color:transparent; }
+    .badge.status-correction_requested { background:var(--warn-bg); color:var(--warn); border-color:transparent; }
+    ul.unmet { margin:0; padding-left:18px; }
+    h3 { font-size:15px; margin:16px 0 6px; }
   </style>
 </head>
 <body>
@@ -64,6 +71,7 @@
     {% if user.is_authenticated and user.is_staff %}
       <nav>
         <a href="{% url 'core:dashboard' %}">Dashboard</a>
+        {% if perms.registry.view_submission %}<a href="{% url 'registry:submission_list' %}">Submissions</a>{% endif %}
         {% if perms.registry.view_campaign %}<a href="{% url 'registry:campaign_list' %}">Campaigns</a>{% endif %}
         {% if perms.registry.view_domain %}<a href="{% url 'registry:domain_list' %}">Domains</a>{% endif %}
       </nav>

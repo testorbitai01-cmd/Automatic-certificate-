@@ -9,6 +9,8 @@ DEFAULTS = {
     "registration.feedback_max_length": 2000,
     # Longest internship accepted on the form; longer ranges are almost always typing mistakes.
     "registration.max_internship_days": 366,
+    # How long a student correction link stays valid.
+    "registration.correction_link_days": 7,
 }
 
 

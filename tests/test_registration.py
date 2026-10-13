@@ -394,7 +394,7 @@ def test_matches_in_other_campaigns_are_flagged_not_blocked(client, campaign):
     assert reasons == {"reg_no", "email", "mobile"}
     assert all(d.resolution == "pending" for d in new.duplicate_flags.all())
     entry = AuditLog.objects.get(action="submission.duplicate_flagged")
-    assert entry.metadata == {"reasons": {"reg_no": 1, "email": 1, "mobile": 1}}
+    assert entry.metadata == {"reasons": {"reg_no": 1, "email": 1, "mobile": 1}, "submission_id": new.pk}
 
 
 def test_email_match_is_case_insensitive_and_checks_alternate(client, campaign):

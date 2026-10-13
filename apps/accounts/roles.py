@@ -44,6 +44,7 @@ SUPER_ADMIN_PERMISSIONS = HR_ADMIN_PERMISSIONS + [
     "core.manage_settings",
     "core.view_sensitive_audit",
     "doctemplates.approve_template",
+    "certificates.approve_lor",
     "certificates.authorize_reissue",
     "certificates.revoke_certificate",
 ]

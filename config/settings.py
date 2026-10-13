@@ -175,6 +175,13 @@ CERT_PRODUCTION_ISSUANCE_ENABLED = env_bool("CERT_PRODUCTION_ISSUANCE_ENABLED", 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    # Removes correction-link tokens from logged request paths (apps/core/logging.py).
+    "filters": {"redact_secret_paths": {"()": "apps.core.logging.RedactSecretPaths"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "filters": ["redact_secret_paths"]}},
+    "loggers": {
+        "django.request": {"filters": ["redact_secret_paths"]},
+        "django.server": {"filters": ["redact_secret_paths"]},
+        "django.security": {"filters": ["redact_secret_paths"]},
+    },
     "root": {"handlers": ["console"], "level": "INFO"},
 }

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load registry_extras %}
+{% block title %}Correct your details{% endblock %}
+{% block brand %}Internship Registration{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>Please correct your details</h1>
+<div class="card" style="margin-bottom:16px">
+  <p><strong>HR has asked you to check:</strong> {{ groups|join:", " }}.</p>
+  <p>{{ correction.reason|linebreaksbr }}</p>
+  <p class="help">This link can be used once and expires on {{ correction.expires_at|date:"j F Y" }}.</p>
+</div>
+<form method="post" class="card" id="registration-form" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert-error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  {% for field in form %}
+    {% if field.name == "gender" %}
+      <div class="field">
+        <span class="label">Gender <span class="required-mark" aria-hidden="true">*</span></span>
+        <div class="radio-row">{% for radio in field %}<label>{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}</div>
+        {% for error in field.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
+      </div>
+    {% else %}
+      {% include "registry/public/_field.html" with field=field suggestion=form.suggestions|get:field.name %}
+    {% endif %}
+  {% endfor %}
+  <button type="submit" id="submit-button">Submit corrections</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  document.querySelectorAll("[data-apply-suggestion]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var input = document.getElementById(btn.getAttribute("data-apply-suggestion"));
+      input.value = btn.getAttribute("data-value");
+      btn.parentElement.hidden = true;
+      input.focus();
+    });
+  });
+  var form = document.getElementById("registration-form");
+  form.addEventListener("submit", function (ev) {
+    if (!form.checkValidity()) { ev.preventDefault(); form.reportValidity(); return; }
+    var btn = document.getElementById("submit-button");
+    if (btn.disabled) { ev.preventDefault(); return; }
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+  });
+})();
+</script>
+{% endblock %}

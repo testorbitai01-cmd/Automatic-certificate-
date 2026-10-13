@@ -138,28 +138,35 @@ def _create_records(campaign, data, raw, request):
         domain.save(update_fields=["requested_by_submission", "updated_at"])
         audit.record("domain.requested", actor_label=PUBLIC_ACTOR, entity=domain,
                      metadata={"submission_id": submission.pk}, request=request)
-    _flag_duplicates(submission, student, data, request)
+    flag_duplicates(submission, request)
     return submission
 
 
-def _flag_duplicates(submission, student, data, request):
+def flag_duplicates(submission, request=None, actor_label=PUBLIC_ACTOR):
+    """Flag other submissions sharing this student's registration number, email or mobile.
+
+    Safe to run again (e.g. after a correction): existing flags are kept, only new matches are added.
+    """
+    student = submission.student
     others = Submission.objects.exclude(pk=submission.pk)
-    emails = [e for e in (data["email"], data.get("alternate_email")) if e]
+    emails = list(student.emails.values_list("address_key", flat=True))
     checks = [
         (DuplicateCandidate.Reason.REG_NO, others.filter(reg_no_key=student.reg_no_key)),
-        (DuplicateCandidate.Reason.EMAIL,
-         others.filter(student__emails__address_key__in=[e.lower() for e in emails]).distinct()),
+        (DuplicateCandidate.Reason.EMAIL, others.filter(student__emails__address_key__in=emails).distinct()),
         (DuplicateCandidate.Reason.MOBILE, others.filter(student__mobile=student.mobile)),
     ]
     flagged = {}
     for reason, qs in checks:
-        matches = list(qs.order_by("-submitted_at").values_list("pk", flat=True)[:MAX_FLAGS_PER_REASON])
+        existing = set(submission.duplicate_flags.filter(reason=reason).values_list("matches_id", flat=True))
+        matches = [pk for pk in qs.order_by("-submitted_at").values_list("pk", flat=True)[:MAX_FLAGS_PER_REASON]
+                   if pk not in existing]
         DuplicateCandidate.objects.bulk_create(
-            [DuplicateCandidate(submission=submission, matches_id=pk, reason=reason) for pk in matches]
+            [DuplicateCandidate(submission=submission, matches_id=pk, reason=reason) for pk in matches],
+            ignore_conflicts=True,
         )
         if matches:
             flagged[reason] = len(matches)
     if flagged:
-        audit.record("submission.duplicate_flagged", actor_label=PUBLIC_ACTOR, entity=submission,
-                     metadata={"reasons": flagged}, request=request)
-
+        audit.record("submission.duplicate_flagged", actor_label=actor_label, entity=submission,
+                     metadata={"reasons": flagged, "submission_id": submission.pk}, request=request)
+    return flagged

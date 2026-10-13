@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Correction link{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>Correction link for {{ sub.student.full_name }}</h1>
+<div class="card">
+  <p>Send this private link to the student. <strong>It is shown only once</strong> and is not stored; if it is lost, create a new link from the submission page.</p>
+  <code class="url" id="correction-link">{{ link }}</code>
+  <div><button type="button" class="secondary small-button" id="copy-link" style="margin-top:8px">Copy link</button></div>
+  <p class="help">Valid until {{ correction.expires_at|date:"j F Y, g:i A" }}. It lets the student change only the requested fields, once.</p>
+  <a class="button" href="{% url 'registry:submission_detail' sub.pk %}">Back to the submission</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("copy-link").addEventListener("click", function () {
+  var btn = this;
+  navigator.clipboard.writeText(document.getElementById("correction-link").textContent).then(function () {
+    btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy link"; }, 1500);
+  });
+});
+</script>
+{% endblock %}

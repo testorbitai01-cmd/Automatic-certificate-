@@ -1,0 +1,20 @@
+{# Audit history table. Expects `history` (AuditLog queryset). #}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
+  <tbody>
+  {% for e in history %}
+    <tr>
+      <td>{{ e.created_at|date:"j M Y, H:i" }}</td>
+      <td>{{ e.actor_label }}</td>
+      <td><code>{{ e.action }}</code></td>
+      <td class="help">
+        {% for key, value in e.metadata.items %}{% if key != "submission_id" and key != "internship_id" %}<div><strong>{{ key }}:</strong> {{ value }}</div>{% endif %}{% endfor %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4" class="muted">No history yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

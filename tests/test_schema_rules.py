@@ -191,3 +191,25 @@ def test_audit_trigger_still_enabled_after_transactional_tests(pg_transactional_
     with connection.cursor() as cur:
         cur.execute("SELECT tgenabled FROM pg_trigger WHERE tgname = 'core_auditlog_append_only'")
         assert cur.fetchone() == ("O",)
+
+
+@pytest.mark.parametrize("model,source,derived,value,expected", [
+    ("StudentEmail", "address", "address_key", "New.Address@Gmail.com", "new.address@gmail.com"),
+    ("Student", "reg_no", "reg_no_key", "NEW-77", "new77"),
+    ("Domain", "name", "normalized_key", "Renamed  Domain", "renamed domain"),
+])
+def test_derived_keys_saved_with_update_fields(model, source, derived, value, expected):
+    """Regression: update_or_create/save(update_fields=...) must not leave a stale comparison key."""
+    from apps.registry import models as m
+    from apps.registry.models import StudentEmail
+
+    if model == "StudentEmail":
+        obj = StudentEmail.objects.create(student=f.student(), kind="primary", address="old@gmail.com")
+    elif model == "Student":
+        obj = f.student(reg_no="OLD-1")
+    else:
+        obj = f.domain("Old Domain")
+    setattr(obj, source, value)
+    obj.save(update_fields=[source])
+    fresh = getattr(m, model).objects.get(pk=obj.pk)
+    assert getattr(fresh, derived) == expected
