@@ -17,6 +17,7 @@ from apps.core.choices import CertificateType
 from apps.core.workflow import STALE_MESSAGE, WorkflowError, clean_reason
 from apps.internships.models import Internship
 
+from .forms import NO_TITLE
 from .models import (CorrectionRequest, DuplicateCandidate, StudentEmail, Submission, SubmissionNote,
                      collapse_whitespace, reg_no_key)
 
@@ -25,6 +26,8 @@ S = Submission.Status
 # Groups HR can ask the student to correct -> form fields shown to the student.
 CORRECTABLE = {
     "name": ("Title and name", ["title", "full_name"]),
+    "preferred_name": ("Preferred name", ["preferred_name"]),
+    "pronouns": ("Pronouns", ["pronouns"]),
     "gender": ("Gender", ["gender", "gender_detail"]),
     "mobile": ("Mobile number", ["mobile"]),
     "reg_no": ("University registration number", ["reg_no"]),
@@ -252,7 +255,8 @@ def current_values(submission):
     internship = submission.internships.select_related("domain").first()
     emails = {e.kind: e.address for e in student.emails.all()}
     return {
-        "title": student.title, "full_name": student.full_name, "gender": student.gender,
+        "title": student.title or NO_TITLE, "full_name": student.full_name, "gender": student.gender,
+        "preferred_name": student.short_name, "pronouns": student.pronouns,
         "gender_detail": student.gender_detail, "mobile": student.mobile, "reg_no": student.reg_no,
         "email": emails.get(StudentEmail.Kind.PRIMARY, ""), "alternate_email": emails.get(StudentEmail.Kind.ALTERNATE, ""),
         "degree": student.degree, "college_name": student.college_name, "college_location": student.college_location,
@@ -318,14 +322,18 @@ def apply_correction(raw_token, cleaned, *, request=None):
             continue
         new = cleaned["domain_obj"].pk if name == "domain" else cleaned[name]
         old = before[name]
+        if name == "title":
+            old = student.title  # stored value ("" = no title), not the form's "No title" sentinel
         if name == "domain":
             old = int(old) if old else None
         if new == old:
             continue
         changes[name] = {"old": _jsonable(old), "new": _jsonable(new)}
         if name in ("title", "full_name", "gender", "gender_detail", "mobile", "reg_no", "degree",
-                    "college_name", "college_location"):
+                    "college_name", "college_location", "pronouns"):
             setattr(student, name, new)
+        elif name == "preferred_name":
+            student.short_name = new
         elif name in ("email", "alternate_email"):
             kind = StudentEmail.Kind.PRIMARY if name == "email" else StudentEmail.Kind.ALTERNATE
             if new:

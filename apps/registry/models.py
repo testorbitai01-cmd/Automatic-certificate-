@@ -117,10 +117,20 @@ class Student(models.Model):
         FEMALE = "female", "Female"
         OTHERS = "others", "Others"
 
-    title = models.CharField(max_length=10)  # validated against the configured title list
+    class Pronouns(models.TextChoices):
+        # Chosen by the student; never inferred from gender.
+        HE = "he", "He / him"
+        SHE = "she", "She / her"
+        THEY = "they", "They / them"
+
+    # Validated against the configured title list; empty = "No title" (if the office allows it).
+    title = models.CharField(max_length=10, blank=True)
     full_name = models.CharField(max_length=150)
-    # Name used in salutations/LOR body (e.g. given names without the trailing initial); set or confirmed by HR, never auto-derived.
+    # Optional preferred name entered by the student (HR may correct it via a correction request). Used only in
+    # the salutation/LOR short-name slots; the full name is used when it is empty. Never auto-derived.
     short_name = models.CharField(max_length=150, blank=True)
+    # Blank only for students registered before pronouns were collected; generation then asks HR to collect them.
+    pronouns = models.CharField(max_length=10, choices=Pronouns.choices, blank=True)
     gender = models.CharField(max_length=10, choices=Gender.choices)
     gender_detail = models.CharField(max_length=100, blank=True)
     mobile = models.CharField(max_length=10)

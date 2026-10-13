@@ -40,6 +40,7 @@ def fill(page, **overrides):
     data = {**VALID, **overrides}
     page.select_option("#id_title", "Ms.")
     page.check("input[name=gender][value=female]")
+    page.check("input[name=pronouns][value=she]")
     page.select_option("#id_domain", label="Data Science")
     for name, value in data.items():
         page.fill(f"#id_{name}", value)

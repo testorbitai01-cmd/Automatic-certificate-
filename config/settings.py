@@ -171,6 +171,10 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_TIMEOUT = 30
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "")
 
+# Internal DOCX->PDF converter (Gotenberg). Unset = PDF generation unavailable.
+PDF_CONVERTER_URL = os.environ.get("PDF_CONVERTER_URL", "")
+PDF_CONVERTER_TIMEOUT = int(os.environ.get("PDF_CONVERTER_TIMEOUT", "60"))
+
 # Production issuance stays off until official Gradtwin templates are approved.
 CERT_PRODUCTION_ISSUANCE_ENABLED = env_bool("CERT_PRODUCTION_ISSUANCE_ENABLED", False)
 

@@ -2,7 +2,9 @@
 from .models import Setting
 
 DEFAULTS = {
-    "registration.titles": ["Mr.", "Ms.", "Mrs."],
+    "registration.titles": ["Mr.", "Ms.", "Mrs.", "Mx."],
+    # Offer a "No title" choice (the certificate then shows the name only).
+    "registration.allow_no_title": True,
     "registration.gmail_only": True,
     "registration.alternate_email_required": False,
     "registration.feedback_required": False,

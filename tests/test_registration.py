@@ -32,7 +32,8 @@ def url(campaign):
 
 def payload(**overrides):
     data = {
-        "title": "Ms.", "full_name": "Test Learner A", "gender": "female", "gender_detail": "",
+        "title": "Ms.", "full_name": "Test Learner A", "preferred_name": "", "pronouns": "she",
+        "gender": "female", "gender_detail": "",
         "mobile": "9000000001", "reg_no": "TEST2026001", "email": "test.learner.a@gmail.com",
         "alternate_email": "", "degree": "B.E. (Computer Science and Engineering)",
         "college_name": "Example Institute of Engineering and Technology", "college_location": "Testville",

@@ -11,4 +11,5 @@ urlpatterns = [
     path("<int:pk>/attendance/", views.attendance, name="attendance"),
     path("<int:pk>/recommendation/", views.recommendation, name="recommendation"),
     path("<int:pk>/certificates/<str:cert_type>/", views.certificate_decision, name="certificate_decision"),
+    path("<int:pk>/certificates/<str:cert_type>/generate/", views.certificate_generate, name="certificate_generate"),
 ]

@@ -17,6 +17,7 @@
     {% include "registry/public/_field.html" with field=form.title %}
     {% include "registry/public/_field.html" with field=form.full_name suggestion=form.suggestions|get:"full_name" %}
   </div>
+  {% include "registry/public/_field.html" with field=form.preferred_name suggestion=form.suggestions|get:"preferred_name" %}
 
   <div class="field">
     <span class="label">Gender <span class="required-mark" aria-hidden="true">*</span></span>
@@ -24,6 +25,13 @@
     {% for error in form.gender.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
   </div>
   {% include "registry/public/_field.html" with field=form.gender_detail hidden=True %}
+
+  <div class="field" id="field-pronouns">
+    <span class="label">Pronouns <span class="required-mark" aria-hidden="true">*</span></span>
+    <div class="radio-row">{% for radio in form.pronouns %}<label>{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}</div>
+    <div class="help">{{ form.pronouns.help_text }}</div>
+    {% for error in form.pronouns.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
+  </div>
 
   <div class="row">
     {% include "registry/public/_field.html" with field=form.mobile %}

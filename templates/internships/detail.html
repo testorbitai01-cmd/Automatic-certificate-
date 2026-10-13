@@ -91,6 +91,24 @@
       <td><span class="badge status-{{ c.status }}">{{ c.status_label }}</span>
         {% if c.request.decided_by %}<div class="help">{{ c.request.decided_by }}, {{ c.request.decided_at|date:"j M Y, H:i" }}</div>{% endif %}
         {% if c.request.reason %}<div class="help">{{ c.request.reason }}</div>{% endif %}
+        {% for iss in c.issuances %}
+          <div class="help" style="margin-top:6px">v{{ iss.version_no }} · {{ iss.get_status_display }}{% if not iss.is_production %} · <strong>TEST template</strong>{% endif %} · {{ iss.created_at|date:"j M Y, H:i" }}
+            {% if iss.file and perms.certificates.download_certificate %}· <a href="{% url 'certificates:download' iss.pk %}">PDF</a>{% endif %}
+            {% if iss.status == "not_issued" and perms.certificates.generate_certificate %}
+              <form method="post" action="{% url 'certificates:action' iss.pk %}" class="inline">{% csrf_token %}
+                {% if may_issue %}<button class="small-button secondary" name="action" value="issue"{% if not production_enabled or not iss.is_production %} disabled title="Production issuance is disabled"{% endif %}>Issue</button>{% else %}<span class="help">Issued by a Super Admin.</span>{% endif %}
+                <input type="text" name="reason" placeholder="Reason to cancel" aria-label="Reason to cancel" maxlength="2000" style="width:auto">
+                <button class="small-button danger" name="action" value="cancel">Cancel draft</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endfor %}
+        {% if c.status == "approved" and perms.certificates.generate_certificate %}
+          <form method="post" action="{% url 'internships:certificate_generate' i.pk c.type %}" style="margin-top:6px">{% csrf_token %}
+            <label class="help" style="display:inline;font-weight:400">Issue date <input type="date" name="issue_date" value="{{ today|date:'Y-m-d' }}" style="width:auto"></label>
+            <button class="small-button">Generate draft PDF</button>
+          </form>
+        {% endif %}
         {% if c.unauthorised_approval %}<div class="field-error">Approved by an account without final LOR authority (before the Super-Admin-only rule). A Super Admin must review it.</div>{% endif %}</td>
       <td>{% if c.unmet %}<ul class="unmet">{% for u in c.unmet %}<li class="help">{{ u }}</li>{% endfor %}</ul>{% else %}<span class="badge active">All requirements met</span>{% endif %}</td>
       {% if perms.certificates.approve_certificate %}

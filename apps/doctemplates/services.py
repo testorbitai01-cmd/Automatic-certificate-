@@ -188,8 +188,8 @@ def deactivate(version_id, *, actor, reason, expected_status=None, request=None)
     return version
 
 
-def inspect_stored(version):
-    """Re-inspect the stored file (for the preview). The stored file was validated at upload."""
+def read_verified(version):
+    """Stored template bytes after checksum verification, plus a fresh inspection with the current rules."""
     try:
         with version.source_file.open("rb") as fh:
             data = fh.read()
@@ -199,4 +199,13 @@ def inspect_stored(version):
     if hashlib.sha256(data).hexdigest() != version.source_sha256:
         raise WorkflowError("The stored template file does not match its recorded checksum. Do not use it; "
                             "contact the administrator.")
-    return docx.inspect_docx(io.BytesIO(data), version.template.cert_type)
+    try:
+        inspection = docx.inspect_docx(io.BytesIO(data), version.template.cert_type)
+    except docx.TemplateFileError as exc:
+        raise WorkflowError("The stored template no longer passes validation: " + " ".join(exc.errors)) from None
+    return data, inspection
+
+
+def inspect_stored(version):
+    """Re-inspect the stored file (for the preview). The stored file was validated at upload."""
+    return read_verified(version)[1]

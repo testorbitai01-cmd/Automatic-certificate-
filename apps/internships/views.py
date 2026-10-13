@@ -1,12 +1,14 @@
 """HR pages for completion verification, LOR recommendation and per-certificate approval (Phase 4)."""
 import datetime as dt
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.certificates import approvals
@@ -46,6 +48,9 @@ def detail(request, pk):
         "history": history,
         "C": Internship.Completion, "P": Internship.ProjectStatus, "R": Recommendation.Decision,
         "modes": AttendancePeriod.Mode.choices,
+        "production_enabled": settings.CERT_PRODUCTION_ISSUANCE_ENABLED,
+        "may_issue": request.user.has_perm("certificates.issue_certificate"),
+        "today": timezone.localdate(),
     })
 
 
@@ -114,4 +119,22 @@ def certificate_decision(request, pk, cert_type):
     _run(request, lambda: approvals.decide(
         pk, cert_type, p.get("decision"), actor=request.user, reason=p.get("reason", ""),
         expected_status=p.get("expected_status") or None, request=request), "Certificate decision recorded.")
+    return _back(pk, "#certificates")
+
+
+@login_required
+@permission_required("certificates.generate_certificate", raise_exception=True)
+@require_POST
+def certificate_generate(request, pk, cert_type):
+    from apps.certificates import generation
+
+    get_object_or_404(Internship, pk=pk)
+    raw_date = request.POST.get("issue_date")
+    issue_date = _date(raw_date) if raw_date else None
+    if raw_date and issue_date is None:
+        messages.error(request, "Enter a valid issue date.")
+        return _back(pk, "#certificates")
+    _run(request, lambda: generation.generate_draft(pk, cert_type, actor=request.user, issue_date=issue_date,
+                                                     request=request),
+         "Draft PDF generated. It has not been issued or sent.")
     return _back(pk, "#certificates")

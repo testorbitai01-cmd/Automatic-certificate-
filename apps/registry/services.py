@@ -11,7 +11,7 @@ PUBLIC_ACTOR = "student (public form)"
 MAX_FLAGS_PER_REASON = 20
 
 # Fields copied as typed into Submission.raw_payload (never the CSRF token).
-RAW_FIELDS = ["title", "full_name", "gender", "gender_detail", "mobile", "reg_no", "email", "alternate_email",
+RAW_FIELDS = ["title", "full_name", "preferred_name", "pronouns", "gender", "gender_detail", "mobile", "reg_no", "email", "alternate_email",
               "degree", "college_name", "college_location", "domain", "requested_domain", "start_date",
               "end_date", "project_title", "feedback"]
 
@@ -102,7 +102,8 @@ def submit_registration(campaign, data, raw, request=None):
 
 def _create_records(campaign, data, raw, request):
     student = Student(
-        title=data["title"], full_name=data["full_name"], gender=data["gender"],
+        title=data["title"], full_name=data["full_name"], short_name=data.get("preferred_name", ""),
+        pronouns=data["pronouns"], gender=data["gender"],
         gender_detail=data["gender_detail"], mobile=data["mobile"], reg_no=data["reg_no"],
         degree=data["degree"], college_name=data["college_name"], college_location=data["college_location"],
     )

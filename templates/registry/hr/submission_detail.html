@@ -12,6 +12,9 @@
     <h2 style="margin-top:0">Registration details</h2>
     <dl class="details">
       <dt>Gender</dt><dd>{{ student.get_gender_display }}{% if student.gender_detail %} ({{ student.gender_detail }}){% endif %}</dd>
+      <dt>Pronouns</dt><dd>{% if student.pronouns %}{{ student.get_pronouns_display }}{% else %}<span class="badge flag">Not collected — request a correction</span>{% endif %}</dd>
+      <dt>Preferred name</dt><dd>{{ student.short_name|default:"— (full name is used)" }}</dd>
+      <dt>Title</dt><dd>{{ student.title|default:"No title" }}</dd>
       <dt>Mobile</dt><dd>{{ student.mobile }}</dd>
       <dt>University reg. no</dt><dd>{{ student.reg_no }}</dd>
       {% for e in emails %}<dt>{{ e.get_kind_display }} email</dt><dd>{{ e.address }} {% if e.is_verified %}<span class="badge active">verified</span>{% else %}<span class="badge">not verified</span>{% endif %}</dd>{% endfor %}

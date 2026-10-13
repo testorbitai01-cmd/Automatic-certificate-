@@ -190,5 +190,6 @@ def certificate_overview(internship, user=None):
             "can_decide": user is not None and may_decide(user, value),
             "final_authority": value in FINAL_AUTHORITY,
             "unauthorised_approval": bool(req) and not approval_is_authorised(req),
+            "issuances": list(req.issuances.select_related("file").order_by("-version_no")) if req else [],
         })
     return rows

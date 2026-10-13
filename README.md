@@ -16,8 +16,9 @@ for production certificates. Until they are provided, the system works with file
 | 3. QR registration campaigns and student form | Done |
 | 3.1 PostgreSQL + browser verification, shared rate limits | Done |
 | 4. HR review, corrections, duplicates, completion and per-certificate approval | Done |
-| 5. Certificate template management and preview | Done (awaiting review) |
-| 6–10 | Not started |
+| 5. Certificate template management and preview | Done |
+| 6. Personalisation, certificate generation and PDF conversion | Done (awaiting review) |
+| 7–10 | Not started |
 
 ## Local development (Windows, PowerShell)
 
@@ -170,6 +171,63 @@ Phase 5 tests only:
 .venv\Scripts\python -m pytest -m browser testsrowser	est_templates_browser.py
 ```
 
+### Phase 6 — Personalisation and certificate generation
+
+**Registration** now asks every student for **pronouns** (He/him, She/her, They/them — required, never inferred
+from gender), an optional **preferred name** (used only for the Offer Letter salutation and the LOR short-name
+slots; the full name is used when it is blank) and offers the titles **Mr., Ms., Mrs., Mx.** and **No title**
+(`registration.titles`, `registration.allow_no_title`). HR corrects these through the existing correction link
+(new groups *Preferred name* and *Pronouns*). Students registered earlier have no pronouns; generation then
+stops and asks HR to collect them.
+
+**Generation** (Internship page → *Certificate approvals* → *Generate draft PDF*, permission
+`certificates.generate_certificate`):
+
+1. Checks: the certificate type is approved (an LOR by a Super Admin), an approved template is active and its
+   stored file matches its checksum, every placeholder the template uses has a value (pronouns, project title,
+   etc.), the issue date is not in the future, and no live draft/issued certificate exists.
+2. Fills the template (`apps/certificates/docxfill.py`): only approved `{{ placeholders }}`, located across
+   Word's text runs; values are inserted as plain XML text (no template engine), so student input can never
+   become markup or code. All other parts of the file are copied byte-for-byte.
+3. Converts to PDF with the internal **Gotenberg/LibreOffice** service (`apps/certificates/pdf.py`), then checks
+   the PDF: one A4 page, letterhead and signature/seal images present, fonts present, every filled value
+   visible, no leftover placeholder text.
+4. Stores the PDF privately with its SHA-256, the template version and a snapshot of the values used, as a
+   **draft** (*not issued*). Audit entries hold ids and the hash only.
+
+**Production lock.** While `CERT_PRODUCTION_ISSUANCE_ENABLED` is off (the default), authentic templates can only
+produce **sample-data proofs** (template page → *Download PDF proof*, with he/she/they), never a real student's
+certificate. TEST templates can produce drafts for testing that can never be issued. *Issue* is refused until
+production is enabled and the draft came from the active authentic template. No email is sent in this phase.
+
+**Who does what.** HR Admins (and Super Admins) generate and cancel drafts (`certificates.generate_certificate`)
+and download them (`certificates.download_certificate`). **Only Super Admins officially issue certificates**
+(`certificates.issue_certificate`, granted to the Super Admin role only); this is checked in the view and again
+in the service before anything else, and issuance re-checks the production switch, draft state, active authentic
+template and approval under row locks, so retries and concurrent requests cannot issue twice.
+
+**Converter.** `docker-compose.yml` runs `gotenberg/gotenberg:8` on an internal network (no published port, no
+internet access, read-only filesystem). Set `PDF_CONVERTER_URL` (compose sets `http://pdf:3000`). The image
+has no Microsoft fonts: Times New Roman is rendered with the metric-compatible **Liberation Serif** (same line
+breaks and positions, slightly different glyph shapes). Installing Microsoft's core fonts in a derived image
+requires accepting Microsoft's EULA.
+
+Local converter for development and the converter integration tests:
+
+```powershell
+docker run -d --rm --name gradtwin-pdf -p 127.0.0.1:3000:3000 gotenberg/gotenberg:8
+$env:PDF_CONVERTER_URL = "http://127.0.0.1:3000"                 # for runserver
+$env:GRADTWIN_TEST_PDF_CONVERTER_URL = "http://127.0.0.1:3000"   # enables tests\test_generation_converter.py
+.venv\Scripts\python -m pytest tests\test_generation.py tests\test_personalisation.py tests\test_generation_converter.py
+```
+
+**Authentic templates.** The four Gradtwin templates were prepared outside this repository (they are office
+documents, not source code) from the authentic Word files with the approved HR decisions, by
+`build_templates.py` in `C:\Users\user\Documents\Gradtwin-templates\`. They still have to go through the normal
+review: HR uploads each `.docx` from `output\` on the Templates page with *authentic Gradtwin template* ticked and
+submits it; a **different** Super Admin downloads the PDF proofs (he/she/they), compares them with the original
+certificates and approves. Until then, and while production issuance is off, no real certificate can be produced.
+
 ### Registration policy settings
 
 Defaults live in `apps/core/policy.py` and can be overridden per key in the `Setting` table
@@ -288,6 +346,7 @@ apps/internships   Internship, AttendancePeriod, Recommendation; services.py (co
                    attendance, recommendation), views.py (HR internship page)
 apps/doctemplates  CertificateTemplate, TemplateVersion, TemplateField; placeholders.py (approved list),
                    docx.py (safe .docx inspection + preview), services.py (upload/review/activation), views.py
-apps/certificates  approvals.py (per-certificate prerequisites and decisions); CertificateRequest, Issuance, GeneratedFile, EmailJob, EmailAttempt, PrintEvent, Handover
+apps/certificates  approvals.py (per-certificate prerequisites and decisions); values.py, docxfill.py, pdf.py,
+                   generation.py (Phase 6 generation), views.py (downloads, issue/cancel); CertificateRequest, Issuance, GeneratedFile, EmailJob, EmailAttempt, PrintEvent, Handover
 docs/data-model.md ER diagram and database-enforced rules
 ```

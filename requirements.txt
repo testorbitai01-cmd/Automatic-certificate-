@@ -3,6 +3,8 @@ psycopg[binary]>=3.2
 dj-database-url>=2.2
 argon2-cffi>=23.1
 segno>=1.6
+lxml>=5.3
+pypdf>=5.1
 
 # test
 pytest>=8

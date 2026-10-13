@@ -2,7 +2,8 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.http import FileResponse, Http404
+from django.core.exceptions import PermissionDenied
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -109,6 +110,27 @@ def download(request, pk):
     response = FileResponse(handle, as_attachment=True,
                             filename=f"{version.template.cert_type}-template-v{version.version}.docx",
                             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    response["Cache-Control"] = "no-store, private"
+    return response
+
+
+@login_required
+@require_GET
+def proof(request, pk):
+    """PDF proof filled with labelled SAMPLE data — never a real student's certificate; nothing is stored."""
+    from apps.certificates import generation
+
+    if not request.user.has_perm("doctemplates.map_template"):
+        raise PermissionDenied
+    get_object_or_404(TemplateVersion, pk=pk)
+    try:
+        data, _ = generation.proof_pdf(pk, actor=request.user, pronouns=request.GET.get("pronouns", "she"),
+                                       request=request)
+    except WorkflowError as exc:
+        messages.error(request, str(exc))
+        return redirect("doctemplates:version", pk=pk)
+    response = HttpResponse(data, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="PROOF-SAMPLE-DATA-template-v{pk}.pdf"'
     response["Cache-Control"] = "no-store, private"
     return response
 

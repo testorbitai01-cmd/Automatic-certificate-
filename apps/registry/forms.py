@@ -10,6 +10,7 @@ from . import validation as v
 from .models import Campaign, Domain, Student, comparison_key
 
 REQUEST_NEW_DOMAIN = "__request__"
+NO_TITLE = "__none__"
 
 
 def format_period(start, end):
@@ -23,6 +24,12 @@ class RegistrationForm(forms.Form):
     title = forms.ChoiceField(label="Title")
     full_name = forms.CharField(label="Full name", max_length=100,
                                 help_text="As it should appear on your certificate, e.g. Amrita Zen A.")
+    preferred_name = forms.CharField(
+        label="Preferred name (optional)", max_length=100, required=False,
+        help_text="Used in greetings such as “Dear …,” and in a recommendation letter. Leave blank to use your "
+                  "full name.")
+    pronouns = forms.ChoiceField(label="Pronouns", choices=Student.Pronouns.choices, widget=forms.RadioSelect,
+                                 help_text="Used in your certificate wording.")
     gender = forms.ChoiceField(label="Gender", choices=Student.Gender.choices, widget=forms.RadioSelect)
     gender_detail = forms.CharField(label="Please specify (optional)", max_length=100, required=False)
     mobile = forms.CharField(
@@ -58,7 +65,8 @@ class RegistrationForm(forms.Form):
         self.review_notes = []
         self.gmail_only = policy.get("registration.gmail_only")
         titles = policy.get("registration.titles")
-        self.fields["title"].choices = [("", "Select")] + [(t, t) for t in titles]
+        self.fields["title"].choices = [("", "Select")] + [(t, t) for t in titles] + (
+            [(NO_TITLE, "No title")] if policy.get("registration.allow_no_title") else [])
         domains = Domain.objects.filter(status=Domain.Status.ACTIVE).order_by("name")
         self.fields["domain"].choices = (
             [("", "Select a domain")] + [(str(d.pk), d.name) for d in domains]
@@ -90,8 +98,17 @@ class RegistrationForm(forms.Form):
 
     # Field checks --------------------------------------------------------
 
+    def clean_title(self):
+        title = self.cleaned_data["title"]
+        return "" if title == NO_TITLE else title
+
     def clean_full_name(self):
         return self._run("full_name", v.check_person_name)
+
+    def clean_preferred_name(self):
+        if not self.cleaned_data.get("preferred_name", "").strip():
+            return ""
+        return self._run("preferred_name", v.check_person_name)
 
     def clean_mobile(self):
         return self._run("mobile", v.check_indian_mobile)

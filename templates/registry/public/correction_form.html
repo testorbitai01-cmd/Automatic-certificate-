@@ -14,9 +14,9 @@
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="alert-error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
   {% for field in form %}
-    {% if field.name == "gender" %}
+    {% if field.name == "gender" or field.name == "pronouns" %}
       <div class="field">
-        <span class="label">Gender <span class="required-mark" aria-hidden="true">*</span></span>
+        <span class="label">{{ field.label }} <span class="required-mark" aria-hidden="true">*</span></span>
         <div class="radio-row">{% for radio in field %}<label>{{ radio.tag }} {{ radio.choice_label }}</label>{% endfor %}</div>
         {% for error in field.errors %}<div class="field-error" role="alert">{{ error }}</div>{% endfor %}
       </div>

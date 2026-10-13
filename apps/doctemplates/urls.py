@@ -10,4 +10,5 @@ urlpatterns = [
     path("versions/<int:pk>/", views.version_detail, name="version"),
     path("versions/<int:pk>/download/", views.download, name="download"),
     path("versions/<int:pk>/action/", views.action, name="action"),
+    path("versions/<int:pk>/proof.pdf", views.proof, name="proof"),
 ]

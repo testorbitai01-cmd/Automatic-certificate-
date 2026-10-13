@@ -19,6 +19,13 @@
       {% if v.notes %}<dt>Notes</dt><dd>{{ v.notes }}</dd>{% endif %}
     </dl>
     <a class="button secondary small-button" href="{% url 'doctemplates:download' v.pk %}">Download original .docx</a>
+    {% if perms.doctemplates.map_template %}
+    <form method="get" action="{% url 'doctemplates:proof' v.pk %}" style="margin-top:8px">
+      <label class="help" for="proof-pronouns" style="display:inline;font-weight:400">PDF proof with SAMPLE data, pronouns</label>
+      <select id="proof-pronouns" name="pronouns" style="width:auto"><option value="she">she/her</option><option value="he">he/him</option><option value="they">they/them</option></select>
+      <button class="secondary small-button">Download PDF proof</button>
+    </form>
+    {% endif %}
   </section>
   <section class="card">
     <h2 style="margin-top:0">Placeholders</h2>

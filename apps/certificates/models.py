@@ -143,6 +143,8 @@ class Issuance(models.Model):
         ]
         permissions = [
             ("generate_certificate", "Can generate certificate PDFs"),
+            # Office rule: only Super Admins officially issue certificates (granted to that role only).
+            ("issue_certificate", "Can officially issue generated certificates"),
             ("download_certificate", "Can download generated certificates"),
             ("send_certificate_email", "Can queue certificate emails"),
             ("record_print", "Can record certificate printing"),
