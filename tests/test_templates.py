@@ -207,6 +207,39 @@ def test_versions_increment_and_duplicates_rejected(hr):
     assert TemplateVersion.objects.count() == 2
 
 
+@pytest.mark.parametrize("status", ["draft", "pending_approval", "active", "retired"])
+def test_identical_file_refused_while_an_unrejected_version_exists(hr, sa, status):
+    v = upload(hr)
+    if status != "draft":
+        services.submit_for_review(v.pk, actor=hr)
+    if status in ("active", "retired"):
+        services.approve_and_activate(v.pk, actor=sa, confirmed_compared=True)
+    if status == "retired":
+        services.deactivate(v.pk, actor=sa, reason="Out of use")
+    assert TemplateVersion.objects.get(pk=v.pk).status == status
+    with pytest.raises(WorkflowError, match="already version 1"):
+        upload(hr, is_production=True)
+    assert TemplateVersion.objects.count() == 1
+
+
+def test_identical_file_allowed_again_after_rejection(hr, sa):
+    """A file rejected because it was uploaded as TEST by mistake can be re-uploaded as authentic."""
+    wrong = upload(hr, is_production=False)
+    services.submit_for_review(wrong.pk, actor=hr)
+    services.reject(wrong.pk, actor=sa, reason="Uploaded as TEST by mistake")
+    fixed = upload(hr, is_production=True)
+    assert (fixed.version, fixed.is_production, fixed.status) == (2, True, V.DRAFT)
+    assert fixed.source_sha256 == wrong.source_sha256
+    assert TemplateVersion.objects.get(pk=wrong.pk).status == V.REJECTED  # history kept, never reused
+    # Only one non-rejected copy at a time: a third identical upload is refused again.
+    with pytest.raises(WorkflowError, match="already version 2"):
+        upload(hr, is_production=True)
+    # The re-uploaded version goes through the normal review: activated by a different Super Admin.
+    services.submit_for_review(fixed.pk, actor=hr)
+    services.approve_and_activate(fixed.pk, actor=sa, confirmed_compared=True)
+    assert TemplateVersion.objects.get(pk=fixed.pk).status == V.ACTIVE
+
+
 @pytest.mark.parametrize("name", ["template.pdf", "template.doc", "template.docm", "template.png", "template"])
 def test_only_docx_extension_accepted(hr, name):
     with pytest.raises(WorkflowError):

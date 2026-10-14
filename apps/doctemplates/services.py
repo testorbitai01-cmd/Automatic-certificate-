@@ -79,9 +79,12 @@ def upload_version(cert_type, uploaded, *, actor, is_production=False, notes="",
         # The four types are seeded by migration; get_or_create (race-safe) keeps upload working if a row is missing.
         CertificateTemplate.objects.get_or_create(cert_type=cert_type)
         template = CertificateTemplate.objects.select_for_update().get(cert_type=cert_type)
-        same = template.versions.filter(source_sha256=digest).first()
+        # A rejected version never becomes usable, so the same file may be uploaded again (e.g. a file
+        # rejected only because it was marked TEST by mistake). Duplicates of any other version are refused.
+        same = template.versions.filter(source_sha256=digest).exclude(status=V.REJECTED).first()
         if same is not None:
-            raise WorkflowError(f"This exact file is already version {same.version} of this template.")
+            raise WorkflowError(f"This exact file is already version {same.version} of this template "
+                                f"({same.get_status_display().lower()}).")
         number = (template.versions.aggregate(m=Max("version"))["m"] or 0) + 1
         version = TemplateVersion(
             template=template, version=number, is_production=bool(is_production), source_filename=name[-255:],
